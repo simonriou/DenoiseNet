@@ -1,0 +1,86 @@
+########################
+# Python
+########################
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+
+########################
+# Virtual environments
+########################
+.env
+.venv/
+venv/
+conda-env/
+env/
+
+########################
+# Jupyter
+########################
+.ipynb_checkpoints/
+
+########################
+# Data (ignore contents, keep structure)
+########################
+data/speech/*
+data/noise/*
+data/models/*
+
+!data/speech/.gitkeep
+!data/noise/.gitkeep
+!data/models/.gitkeep
+
+########################
+# Model checkpoints & tensors
+########################
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.npz
+*.npy
+
+########################
+# Logs & experiment outputs
+########################
+logs/
+runs/
+outputs/
+wandb/
+tensorboard/
+*.log
+
+########################
+# Audio artifacts
+########################
+*.wav
+*.flac
+*.mp3
+*.ogg
+
+########################
+# OS-specific
+########################
+.DS_Store
+Thumbs.db
+
+########################
+# IDEs & editors
+########################
+.vscode/
+.idea/
+*.swp
+*.swo
+
+########################
+# Temporary files
+########################
+tmp/
+temp/
+.cache/
