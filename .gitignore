@@ -49,8 +49,8 @@ data/models/*
 ########################
 # Logs & experiment outputs
 ########################
-logs/
-checkpoints/
+logs/*
+checkpoints/*
 runs/
 outputs/
 wandb/
