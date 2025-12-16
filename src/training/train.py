@@ -124,7 +124,7 @@ def train(session_name: str):
         )
 
         # Save checkpoint
-        checkpoint_path = os.path.join(checkpoints_dir, f"denoise_cnn_epoch{epoch}.pth")
+        checkpoint_path = os.path.join(checkpoints_dir, f"chkp_{session_name}_epoch{epoch}.pth")
         torch.save(model.state_dict(), checkpoint_path)
 
         # Log to CSV
