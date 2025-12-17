@@ -8,28 +8,18 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
 from utils.constants import *
-from training.dataset import SpeechNoiseDataset
-from models.DenoiseUNet import DenoiseUNet
-from utils.pad_collate import pad_collate
-
-"""
-Training script for complex-mask-based speech denoising.
-
-The model now predicts a complex ratio mask M(f,t).
-The enhanced STFT is obtained as: X_hat = M ⊙ Y. (⊙ denotes element-wise multiplication)
-The loss is a complex L1 loss between X_hat and the clean STFT X. (to be upgraded with SI-SDR later)
-"""
+from training.dataset import SpeechNoiseDatasetTemporal
+from models.ConvRNNTemporalDenoiser import ConvRNNTemporalDenoiser
 
 # -----------------------------------------------------------
 # Loss
 # -----------------------------------------------------------
 
-def complex_l1_loss(X_hat: torch.Tensor, X: torch.Tensor):
+def waveform_mse_loss(pred: torch.Tensor, target: torch.Tensor):
     """
-    Complex L1 loss: E[ |X_hat - X| ]
+    Mean squared error on waveform: E[ |pred - target|^2 ]
     """
-    return torch.mean(torch.abs(X_hat - X))
-
+    return torch.mean((pred - target) ** 2)
 
 # -----------------------------------------------------------
 # Evaluation
@@ -42,23 +32,16 @@ def evaluate(model, dataloader, device):
 
     with torch.no_grad():
         for batch in dataloader:
-            features = batch["features"].to(device)      # [B, 2, F, T]
-            Y = batch["mix_stft"].to(device)              # complex
-            X = batch["clean_stft"].to(device)            # complex
+            mixture = batch["mixture"].to(device).unsqueeze(-1)  # [B, T, 1]
+            clean = batch["clean"].to(device).unsqueeze(-1)
 
-            pred_mask = model(features)                   # [B, 2, F, T]
-            Mr = pred_mask[:, 0]
-            Mi = pred_mask[:, 1]
-            M = torch.complex(Mr, Mi)
-
-            X_hat = M * Y
-            loss = complex_l1_loss(X_hat, X)
+            pred_clean = model(mixture)
+            loss = waveform_mse_loss(pred_clean, clean)
 
             total_loss += loss.item()
             n_batches += 1
 
     return total_loss / n_batches
-
 
 # -----------------------------------------------------------
 # Training
@@ -83,7 +66,12 @@ def train(session_name: str):
         return
 
     # 3. Dataset
-    dataset = SpeechNoiseDataset(CLEAN_DIR, NOISE_DIR, snr_db=TARGET_SNR)
+    dataset = SpeechNoiseDatasetTemporal(
+        clean_dir=CLEAN_DIR,
+        noise_dir=NOISE_DIR,
+        snr_db=TARGET_SNR,
+        seq_len=SEQ_LEN  # e.g., 16000 samples for 1s segments
+    )
 
     val_ratio = 0.15
     n_total = len(dataset)
@@ -100,7 +88,6 @@ def train(session_name: str):
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        collate_fn=pad_collate,
         pin_memory=(device.type == "cuda")
     )
 
@@ -108,12 +95,12 @@ def train(session_name: str):
         val_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        collate_fn=pad_collate,
         pin_memory=(device.type == "cuda")
     )
 
     # 4. Model & Optimizer
-    model = DenoiseUNet().to(device)
+    model = ConvRNNTemporalDenoiser().to(device)
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # 5. Logging & checkpoints
@@ -137,33 +124,24 @@ def train(session_name: str):
         train_loss = 0.0
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
-            features = batch["features"].to(device)
-            Y = batch["mix_stft"].to(device)
-            X = batch["clean_stft"].to(device)
+            mixture = batch["mixture"].to(device).unsqueeze(-1)
+            clean = batch["clean"].to(device).unsqueeze(-1)
 
             optimizer.zero_grad()
-
-            pred_mask = model(features)
-            Mr = pred_mask[:, 0]
-            Mi = pred_mask[:, 1]
-            M = torch.complex(Mr, Mi)
-
-            X_hat = M * Y
-            loss = complex_l1_loss(X_hat, X)
-
+            pred_clean = model(mixture)
+            loss = criterion(pred_clean, clean)
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
 
         train_loss /= len(train_loader)
-
         val_loss = evaluate(model, val_loader, device)
 
         print(
             f"Epoch {epoch} | "
-            f"Train Loss: {train_loss:.4f} | "
-            f"Val Loss: {val_loss:.4f}"
+            f"Train Loss: {train_loss:.6f} | "
+            f"Val Loss: {val_loss:.6f}"
         )
 
         # Save checkpoint
@@ -183,7 +161,6 @@ def train(session_name: str):
             torch.save(model.state_dict(), final_model_path)
 
     print("Training complete.")
-
 
 # -----------------------------------------------------------
 # Entry point

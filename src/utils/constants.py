@@ -8,6 +8,8 @@ SAMPLE_RATE = 16000
 TARGET_SNR = 0.0 # dB
 MIN_DB_CLIP = 80.0
 
+SEQ_LEN = 16000  # 1 second segments (for RNN)
+
 N_FFT = 512
 HOP_LENGTH = 256
 WIN_LENGTH = 512
@@ -28,12 +30,12 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "batch32-weighted"
+MODEL_NAME = "complex"
 SAVE_DENOISED = True
 SAVE_NOISY = True
 
 EPOCHS = 20
-BATCH_SIZE = 32
+BATCH_SIZE = 4
 LEARNING_RATE = 0.001
 
 LAMBDA = 1.0
