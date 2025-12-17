@@ -1,53 +1,75 @@
 import torch
 
-"""
-This function pads variable-length spectrograms in a batch to the maximum length in that batch.
-It ensures that all tensors in the batch have the same time dimension by zero-padding shorter ones.
-This is used for batching in the data loader when dealing with audio data of varying lengths.
-"""
-
 def pad_collate(batch):
-    batch_size = len(batch)
+    """
+    Pads variable-length tensors along the time dimension.
+
+    Supported shapes:
+    - features:    [C, F, T]   (real-valued)
+    - mix_stft:    [F, T]      (complex)
+    - clean_stft:  [F, T]      (complex)
+    - clean_audio: [T]
+    """
 
     collated = {}
+    batch_size = len(batch)
 
-    # --- Spectrogram padding ---
-    max_spec_len = batch[0]["features"].shape[2]
-    freq_bins = batch[0]["features"].shape[1]
+    for key in batch[0].keys():
 
-    for key in ["features", "ibm", "mix_mag", "clean_mag", "mix_phase"]:
-        if batch[0].get(key) is None:
-            collated[key] = None
-            continue
+        # --------------------------------------------------
+        # CNN inputs: [C, F, T]
+        # --------------------------------------------------
+        if key == "features":
+            C, F, _ = batch[0][key].shape
+            max_T = max(item[key].shape[-1] for item in batch)
 
-        max_spec_len = max(item[key].shape[2] for item in batch)
+            padded = torch.zeros(
+                batch_size, C, F, max_T,
+                dtype=batch[0][key].dtype
+            )
 
-        padded = torch.zeros(
-            batch_size, 1, freq_bins, max_spec_len,
-            dtype=batch[0][key].dtype
-        )
+            for i, item in enumerate(batch):
+                T = item[key].shape[-1]
+                padded[i, :, :, :T] = item[key]
 
-        for i, item in enumerate(batch):
-            curr_len = item[key].shape[2]
-            padded[i, :, :, :curr_len] = item[key]
+            collated[key] = padded
 
-        collated[key] = padded
+        # --------------------------------------------------
+        # Complex STFTs: [F, T]
+        # --------------------------------------------------
+        elif key in ["mix_stft", "clean_stft"]:
+            F, _ = batch[0][key].shape
+            max_T = max(item[key].shape[-1] for item in batch)
 
-    # --- Waveform padding (ONLY if present) ---
-    if batch[0].get("clean_audio") is not None:
-        # Ensure 1D waveforms
-        clean_wavs = [item["clean_audio"].view(-1) for item in batch]
+            padded = torch.zeros(
+                batch_size, F, max_T,
+                dtype=batch[0][key].dtype
+            )
 
-        max_wav_len = max(wav.shape[0] for wav in clean_wavs)
+            for i, item in enumerate(batch):
+                T = item[key].shape[-1]
+                padded[i, :, :T] = item[key]
 
-        wav_padded = torch.zeros(batch_size, max_wav_len)
+            collated[key] = padded
 
-        for i, wav in enumerate(clean_wavs):
-            curr_len = wav.shape[0]
-            wav_padded[i, :curr_len] = wav
+        # --------------------------------------------------
+        # Waveforms: [T]
+        # --------------------------------------------------
+        elif key == "clean_audio":
+            max_len = max(item[key].shape[-1] for item in batch)
 
-        collated["clean_audio"] = wav_padded
-    else:
-        collated["clean_audio"] = None
+            padded = torch.zeros(batch_size, max_len)
+
+            for i, item in enumerate(batch):
+                T = item[key].shape[-1]
+                padded[i, :T] = item[key]
+
+            collated[key] = padded
+
+        # --------------------------------------------------
+        # Fallback: stack
+        # --------------------------------------------------
+        else:
+            collated[key] = torch.stack([item[key] for item in batch])
 
     return collated

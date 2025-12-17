@@ -26,7 +26,7 @@ class DenoiseUNet(nn.Module):
         
         # --- Encoder (Downsampling) ---
         # We increase channels as we go deeper to capture more complex features
-        self.enc1 = self._make_block(1, 16)
+        self.enc1 = self._make_block(2, 16) # Input has 2 channels: real + imag
         self.enc2 = self._make_block(16, 32)
         self.enc3 = self._make_block(32, 64)
         
@@ -40,8 +40,7 @@ class DenoiseUNet(nn.Module):
         self.dec1 = self._make_block(32 + 16, 16)
         
         # --- Output ---
-        self.out_conv = nn.Conv2d(16, 1, kernel_size=1)
-        self.sigmoid = nn.Sigmoid()
+        self.out_conv = nn.Conv2d(16, 2, kernel_size=1) # Output has 2 channels: real + imag
         
         # Pooling definition
         self.pool = nn.MaxPool2d(2, 2)
@@ -98,6 +97,6 @@ class DenoiseUNet(nn.Module):
         d1 = self.dec1(d1)
         
         # --- Output ---
-        mask = self.sigmoid(self.out_conv(d1))
+        mask = self.out_conv(d1)
         
-        return mask
+        return mask # Output shape: [B, 2, F, T] -> [Re(M), Im(M)]

@@ -51,21 +51,16 @@ class SpeechNoiseDataset(Dataset):
     def _compute_rms(self, tensor):
         return torch.sqrt(torch.mean(tensor ** 2) + 1e-8)
 
-    def _get_stft_magnitude(self, signal):
-        # Uses torch.stft (Core PyTorch)
+    def _get_stft(self, signal):
         window = torch.hann_window(WIN_LENGTH, device=signal.device)
-        stft = torch.stft(signal, n_fft=N_FFT, hop_length=HOP_LENGTH, 
-                          win_length=WIN_LENGTH, window=window, 
-                          return_complex=True)
-        # Magnitude = abs(complex)
-        return stft.abs()
-    
-    def _get_stft_phase(self, tensor):
-        window = torch.hann_window(WIN_LENGTH, device=tensor.device)
-        stft = torch.stft(tensor, n_fft=N_FFT, hop_length=HOP_LENGTH, 
-                          win_length=WIN_LENGTH, window=window, 
-                          return_complex=True)
-        return torch.angle(stft)
+        return torch.stft(
+            signal,
+            n_fft = N_FFT,
+            hop_length = HOP_LENGTH,
+            win_length = WIN_LENGTH,
+            window = window,
+            return_complex=True
+        )
 
     def __getitem__(self, idx):
         # 1. Load Clean
@@ -130,66 +125,21 @@ class SpeechNoiseDataset(Dataset):
             clean_audio = clean_audio / max_amp
             noise_scaled = noise_scaled / max_amp
 
-        # 5. Compute STFT & Features
-        # Feature: Log Squared Magnitude
-        clean_mag = self._get_stft_magnitude(clean_audio)
-        noise_mag = self._get_stft_magnitude(noise_scaled)
-        mix_mag   = self._get_stft_magnitude(mixture)
+        # 5. Features are now complex STFTs
+        Y = self._get_stft(mixture)
+        X = self._get_stft(clean_audio)
 
-        if self.mode == 'test':
-            mix_phase = self._get_stft_phase(mixture)
-        
-        # Log(Mag^2) = 2 * Log(Mag)
-        # Adding small epsilon to prevent log(0)
-        features = 20 * torch.log10(mix_mag + 1e-8)
+        # 6. Prepare network input: real + imag
+        # Shape: [2, F, T]
+        Y_real = Y.real
+        Y_imag = Y.imag
+        features = torch.stack([Y_real, Y_imag], dim=0)
 
-        # Set max value at 0 dB
-        features = features - torch.max(features)
-        # Clip minimum at -80 dB
-        features = torch.clamp(features, min=-MIN_DB_CLIP)
-        # Normalize to [0, 1]
-        features = (features + MIN_DB_CLIP) / MIN_DB_CLIP
-
-        # 6. Compute IBM Label
-        # 1 if Clean > Noise, else 0
-        ibm = (clean_mag > noise_mag).float()
-
-        if DEBUG:
-            print(f"DEBUG: Loaded {os.path.basename(clean_path)}")
-            print(f"  Clean RMS: {clean_rms:.4f}, Noise RMS: {noise_rms:.4f}, Scale: {scale_factor:.4f}")
-            print(f"  Mixture Max Amp: {torch.max(torch.abs(mixture)):.4f}")
-            print(f"  Feature Shape: {features.shape}, IBM Shape: {ibm.shape}")
-
-            # Plot one spectrogram + IBM for verification
-            plt.figure(figsize=(12, 6))
-            plt.subplot(3,1,1)
-            plt.title("Mixture Log-Magnitude Spectrogram")
-            plt.imshow(20 * torch.log10(mix_mag + 1e-8).numpy(), origin='lower', aspect='auto', cmap='magma')
-            plt.colorbar(format='%+2.0f dB')
-            plt.subplot(3,1,2)
-            plt.title("Ideal Binary Mask (IBM)")
-            plt.imshow(ibm.numpy(), origin='lower', aspect='auto', cmap='gray', vmin=0, vmax=1)
-            plt.subplot(3,1,3)
-            plt.title("Clean Log-Magnitude Spectrogram")
-            plt.imshow(20 * torch.log10(clean_mag + 1e-8).numpy(), origin='lower', aspect='auto', cmap='magma')
-            plt.colorbar(format='%+2.0f dB')
-            plt.tight_layout()
-            plt.show()
-
-        # Input shape needs to be [Channels, Freq, Time] for CNN
-        # Current shape is [Freq, Time], unsqueeze to add channel
-        
         sample = {
-            "features": features.unsqueeze(0),
-            "ibm": ibm.unsqueeze(0),
-            "clean_mag": clean_mag.unsqueeze(0),
-            "mix_mag": mix_mag.unsqueeze(0),
-            "mix_phase": None,
-            "clean_audio": None
+            "features": features, # [2, F, T]
+            "mix_stft": Y, # complex
+            "clean_stft": X, # complex
+            "clean_audio": clean_audio # for temporal loss if needed
         }
-
-        if self.mode == 'test':
-            sample["mix_phase"] = mix_phase.unsqueeze(0)
-            sample["clean_audio"] = clean_audio.unsqueeze(0)
         
         return sample
