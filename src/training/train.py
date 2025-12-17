@@ -37,11 +37,12 @@ def evaluate(model, dataloader, criterion, device):
             features = batch["features"].to(device)
             mix_mag = batch["mix_mag"].to(device)
             clean_mag = batch["clean_mag"].to(device)
+            ibm = batch["ibm"].to(device)
 
             pred_mask = model(features)
             est_mag = pred_mask * mix_mag
 
-            loss = criterion(est_mag, clean_mag)
+            loss = criterion(pred_mask, ibm,est_mag, clean_mag)
             total_loss += loss.item()
         
     return total_loss / len(dataloader)
