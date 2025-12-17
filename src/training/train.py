@@ -33,24 +33,33 @@ def custom_loss(x, y, a, b, lambda_, gamma_):
     l1 = nn.L1Loss()(a, b)
     return lambda_ * bce + gamma_ * l1
 
-def evaluate(model, dataloader, criterion, device):
+def evaluate(model, dataloader, criterion_bce, criterion_l1, device):
     model.eval()
-    total_loss = 0.0
+    total_bce = 0.0
+    total_l1  = 0.0
+    n_batches = 0
 
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Evaluating", leave=False):
-            features = batch["features"].to(device)
-            mix_mag = batch["mix_mag"].to(device)
-            clean_mag = batch["clean_mag"].to(device)
-            ibm = batch["ibm"].to(device)
+        for batch in dataloader:
+            features     = batch["features"].to(device)
+            ibm_target   = batch["ibm"].to(device)
+            mix_mag      = batch["mix_mag"].to(device)
+            clean_mag    = batch["clean_mag"].to(device)
 
             pred_mask = model(features)
-            est_mag = pred_mask * mix_mag
+            pred_mag  = pred_mask * mix_mag
 
-            loss = criterion(pred_mask, ibm,est_mag, clean_mag)
-            total_loss += loss.item()
-        
-    return total_loss / len(dataloader)
+            bce_loss = criterion_bce(pred_mask, ibm_target)
+            l1_loss  = criterion_l1(pred_mag, clean_mag)
+
+            total_bce += bce_loss.item()
+            total_l1  += l1_loss.item()
+            n_batches += 1
+
+    avg_bce = total_bce / n_batches
+    avg_l1  = total_l1 / n_batches
+
+    return avg_bce, avg_l1
 
 def train(session_name: str):
     # 1. Setup Device
@@ -108,7 +117,7 @@ def train(session_name: str):
     # Write CSV header
     with open(log_file_path, mode='w', newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["epoch", "train_loss", "val_loss"])
+        writer.writerow(["epoch", "train_loss", "val_bce", "val_l1"])
 
     # Initialize running averages for losses
     avg_bce = 0.0
@@ -121,7 +130,7 @@ def train(session_name: str):
 
         model.train()
         train_loss = 0.0
-        
+
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
             features = batch["features"].to(device)
             mix_mag = batch["mix_mag"].to(device)
@@ -150,12 +159,12 @@ def train(session_name: str):
         
         train_loss /= len(train_loader)
 
-        val_loss = evaluate(model, val_loader, criterion, device)
+        val_bce, val_l1 = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1=l1_loss, device=device)
         
         print(
             f"Epoch {epoch} | "
             f"Train Loss: {train_loss:.4f} | "
-            f"Val Loss: {val_loss:.4f}"
+            f"Val BCE: {val_bce:.4f}, Val L1: {val_l1:.4f}"
         )
 
         # Save checkpoint
@@ -165,7 +174,7 @@ def train(session_name: str):
         # Log to CSV
         with open(log_file_path, mode='a', newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([epoch, train_loss, val_loss])
+            writer.writerow([epoch, train_loss, val_bce, val_l1])
 
         # If final epoch, also save final model
         if epoch == EPOCHS - 1:
