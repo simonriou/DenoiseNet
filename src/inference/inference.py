@@ -84,6 +84,7 @@ with torch.no_grad():
                 n_fft=N_FFT,
                 hop_length=HOP_LENGTH,
                 win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
                 length=batch["clean_audio"].shape[1]
             )
             complex_spec_noisy = mix_mag.squeeze(0).squeeze(0) * torch.exp(1j * mix_phase.squeeze(0).squeeze(0))
@@ -92,6 +93,7 @@ with torch.no_grad():
                 n_fft=N_FFT,
                 hop_length=HOP_LENGTH,
                 win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
                 length=batch["clean_audio"].shape[1]
             )
         elif PHASE_MODE.lower() == 'vocoder':

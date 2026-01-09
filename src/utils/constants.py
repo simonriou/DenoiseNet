@@ -28,7 +28,7 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "batch32-auto"
+MODEL_NAME = "perceptual-1"
 SAVE_DENOISED = True
 SAVE_NOISY = True
 
@@ -40,7 +40,7 @@ LAMBDA = 1.0
 GAMMA = 2.5
 
 N_MELS = 80
-ALPHA = 0.5  # Weight for mel-scale L1 loss
+ALPHA = 1.0  # Weight for mel-scale L1 loss
 
 PHASE_MODE = "raw"  # Options: "raw", "GL", "vocoder"
 GL_ITERS = 64
