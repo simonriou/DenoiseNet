@@ -28,7 +28,7 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "perceptual-2"
+MODEL_NAME = "perceptual-1"
 SAVE_DENOISED = True
 SAVE_NOISY = True
 
@@ -38,11 +38,12 @@ LEARNING_RATE = 0.001
 
 LAMBDA = 1.0
 GAMMA = 0.75
+ZETA = 0.5
 
 N_MELS = 80
 ALPHA = 10.0  # Weight for mel-scale L1 loss
 
-PHASE_MODE = "GL"  # Options: "raw", "GL", "vocoder"
+PHASE_MODE = "raw"  # Options: "raw", "GL", "vocoder"
 GL_ITERS = 64
 
 DEBUG = False

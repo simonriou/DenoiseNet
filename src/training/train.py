@@ -43,9 +43,9 @@ def bce_loss(x, y):
 def l1_loss(x, y):
     return nn.L1Loss()(x, y)
 
-def custom_loss(bce, l1, lambda_, gamma_):
-    # lambda BCE + gamma L1
-    return lambda_ * bce + gamma_ * l1
+def custom_loss(bce, l1, waveform, lambda_, gamma_, zeta_):
+    # lambda BCE + gamma L1 + zeta Waveform
+    return lambda_ * bce + gamma_ * l1 + zeta_ * waveform
 
 def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1_mel, device):
     model.eval()
@@ -53,6 +53,7 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
     total_l1  = 0.0
     total_l1_linear = 0.0
     total_l1_mel = 0.0
+    total_waveform = 0.0
     n_batches = 0
 
     mel_fb = torch.load(f"{ROOT}/src/training/mel_fb_{N_FFT}_{N_MELS}_{SAMPLE_RATE}.pt").to(device)
@@ -63,20 +64,33 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
             ibm_target   = batch["ibm"].to(device)
             mix_mag      = batch["mix_mag"].to(device)
             clean_mag    = batch["clean_mag"].to(device)
+            clean_audio  = batch["clean_audio"].to(device)
 
             pred_mask = model(features)
             pred_mag  = pred_mask * mix_mag
+
+            complex_spec_denoised = pred_mag.squeeze(0).squeeze(0) * torch.exp(1j * batch["mix_phase"].to(device).squeeze(0).squeeze(0))
+            reconstructed_audio = torch.istft(
+                complex_spec_denoised,
+                n_fft=N_FFT,
+                hop_length=HOP_LENGTH,
+                win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
+                length=batch["clean_audio"].shape[1]
+            )
 
             bce_loss = criterion_bce(pred_mask, ibm_target)
 
             l1_linear_loss = criterion_l1_linear(pred_mag, clean_mag)
             l1_mel_loss = criterion_l1_mel(pred_mag, clean_mag, mel_fb)
             l1_loss = l1_linear_loss + ALPHA * l1_mel_loss
+            waveform_loss = criterion_l1_linear(reconstructed_audio, clean_audio)
 
             total_bce += bce_loss.item()
             total_l1  += l1_loss.item()
             total_l1_linear += l1_linear_loss.item()
             total_l1_mel += l1_mel_loss.item()
+            total_waveform += waveform_loss.item()
             n_batches += 1
 
     avg_bce = total_bce / n_batches
@@ -85,7 +99,9 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
     avg_l1_linear = total_l1_linear / n_batches
     avg_l1_mel = total_l1_mel / n_batches
 
-    return avg_bce, avg_l1, avg_l1_linear, avg_l1_mel
+    avg_waveform = total_waveform / n_batches
+
+    return avg_bce, avg_l1, avg_l1_linear, avg_l1_mel, avg_waveform
 
 def train(session_name: str):
     # 1. Setup Device
@@ -143,11 +159,12 @@ def train(session_name: str):
     # Write CSV header
     with open(log_file_path, mode='w', newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["epoch", "train_loss", "val_bce", "val_l1_linear", "val_l1_mel"])
+        writer.writerow(["epoch", "train_loss", "val_bce", "val_l1_linear", "val_l1_mel", "val_wave"])
 
     # Initialize running averages for losses
     avg_bce = 0.0
     avg_l1 = 0.0
+    avg_waveform = 0.0
     alpha = 0.99 # smoothing factor for running avg
 
     print("Starting Training...")
@@ -160,12 +177,25 @@ def train(session_name: str):
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
             features = batch["features"].to(device)
             mix_mag = batch["mix_mag"].to(device)
+            mix_phase = batch["mix_phase"].to(device)
             clean_mag = batch["clean_mag"].to(device)
             ibm = batch["ibm"].to(device)
+            clean_audio = batch["clean_audio"].to(device)
 
             optimizer.zero_grad()
             pred_mask = model(features)
             pred_mag = pred_mask * mix_mag
+
+            complex_spec_denoised = pred_mag.squeeze(0).squeeze(0) * torch.exp(1j * mix_phase.squeeze(0).squeeze(0))
+
+            reconstructed_audio = torch.istft(
+                complex_spec_denoised,
+                n_fft=N_FFT,
+                hop_length=HOP_LENGTH,
+                win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
+                length=batch["clean_audio"].shape[1]
+            )
 
             # print(pred_mag.shape)
             # print(mel_fb.shape)
@@ -174,15 +204,18 @@ def train(session_name: str):
             l1_linear = l1_loss(pred_mag, clean_mag)
             l1_mel = mel_l1_loss(pred_mag, clean_mag, mel_fb)
             l1 = l1_linear + ALPHA * l1_mel
+            waveform_loss = l1_loss(reconstructed_audio, clean_audio)
 
             if avg_bce == 0.0:
                 avg_bce = bce.item()
                 avg_l1 = l1.item()
+                avg_waveform = waveform_loss.item()
             else:
                 avg_bce = alpha * avg_bce + (1 - alpha) * bce.item()
                 avg_l1 = alpha * avg_l1 + (1 - alpha) * l1.item()
+                avg_waveform = alpha * avg_waveform + (1 - alpha) * waveform_loss.item()
 
-            loss = custom_loss((bce / (avg_bce + 1e-8)), (l1 / (avg_l1 + 1e-8)), LAMBDA, GAMMA)
+            loss = custom_loss((bce / (avg_bce + 1e-8)), (l1 / (avg_l1 + 1e-8)), (waveform_loss / (avg_waveform + 1e-8)), LAMBDA, GAMMA, ZETA)
             loss.backward()
             optimizer.step()
             
@@ -190,13 +223,14 @@ def train(session_name: str):
         
         train_loss /= len(train_loader)
 
-        val_bce, val_l1, val_l1_linear, val_l1_mel = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1_linear=l1_loss, criterion_l1_mel=mel_l1_loss, device=device)
+        val_bce, val_l1, val_l1_linear, val_l1_mel, val_waveform = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1_linear=l1_loss, criterion_l1_mel=mel_l1_loss, device=device)
         
         print(
             f"Epoch {epoch} | "
             f"Train Loss: {train_loss:.4f} | "
             f"Val BCE: {val_bce:.4f}, Val L1: {val_l1:.4f} | "
-            f"Val L1 Linear: {val_l1_linear:.4f}, Val L1 Mel: {val_l1_mel:.4f}"
+            f"Val L1 Linear: {val_l1_linear:.4f}, Val L1 Mel: {val_l1_mel:.4f} |"
+            f"Val Waveform: {val_waveform:.4f}"
         )
 
         # Save checkpoint

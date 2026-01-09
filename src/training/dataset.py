@@ -184,8 +184,8 @@ class SpeechNoiseDataset(Dataset):
             "ibm": ibm.unsqueeze(0),
             "clean_mag": clean_mag.unsqueeze(0),
             "mix_mag": mix_mag.unsqueeze(0),
-            "mix_phase": None,
-            "clean_audio": None
+            "mix_phase": mix_phase.unsqueeze(0),
+            "clean_audio": clean_audio.unsqueeze(0)
         }
 
         if self.mode == 'test':
