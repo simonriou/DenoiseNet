@@ -69,15 +69,23 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
             pred_mask = model(features)
             pred_mag  = pred_mask * mix_mag
 
-            complex_spec_denoised = pred_mag.squeeze(0).squeeze(0) * torch.exp(1j * batch["mix_phase"].to(device).squeeze(0).squeeze(0))
-            reconstructed_audio = torch.istft(
-                complex_spec_denoised,
-                n_fft=N_FFT,
-                hop_length=HOP_LENGTH,
-                win_length=WIN_LENGTH,
-                window=torch.hann_window(WIN_LENGTH).to(device),
-                length=batch["clean_audio"].shape[1]
-            )
+            reconstructed_audio = []
+            for b in range(pred_mag.shape[0]):
+                mag = pred_mag[b, 0]
+                phase = torch.angle(mix_mag[b, 0] * torch.exp(1j * 0))  # Using mix phase
+                complex_spec = mag * torch.exp(1j * phase)
+
+                audio = torch.istft(
+                    complex_spec,
+                    n_fft=N_FFT,
+                    hop_length=HOP_LENGTH,
+                    win_length=WIN_LENGTH,
+                    window=torch.hann_window(WIN_LENGTH).to(device),
+                    length=clean_audio.shape[1]
+                )
+                reconstructed_audio.append(audio)
+            
+            reconstructed_audio = torch.stack(reconstructed_audio, dim=0).to(device)
 
             bce_loss = criterion_bce(pred_mask, ibm_target)
 
