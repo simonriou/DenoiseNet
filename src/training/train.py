@@ -63,6 +63,7 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
             features     = batch["features"].to(device)
             ibm_target   = batch["ibm"].to(device)
             mix_mag      = batch["mix_mag"].to(device)
+            mix_phase    = batch["mix_phase"].to(device)
             clean_mag    = batch["clean_mag"].to(device)
             clean_audio  = batch["clean_audio"].to(device)
 
@@ -72,7 +73,7 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
             reconstructed_audio = []
             for b in range(pred_mag.shape[0]):
                 mag = pred_mag[b, 0]
-                phase = torch.angle(mix_mag[b, 0] * torch.exp(1j * 0))  # Using mix phase
+                phase = mix_phase[b, 0]  # remove channel dim
                 complex_spec = mag * torch.exp(1j * phase)
 
                 audio = torch.istft(
