@@ -136,8 +136,7 @@ class SpeechNoiseDataset(Dataset):
         noise_mag = self._get_stft_magnitude(noise_scaled)
         mix_mag   = self._get_stft_magnitude(mixture)
 
-        if self.mode == 'test':
-            mix_phase = self._get_stft_phase(mixture)
+        mix_phase = self._get_stft_phase(mixture)
         
         # Log(Mag^2) = 2 * Log(Mag)
         # Adding small epsilon to prevent log(0)
