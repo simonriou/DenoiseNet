@@ -196,7 +196,7 @@ def train(session_name: str):
             f"Epoch {epoch} | "
             f"Train Loss: {train_loss:.4f} | "
             f"Val BCE: {val_bce:.4f}, Val L1: {val_l1:.4f} | "
-            f"Val L1 Linear: {val_l1_linear}, Val L1 Mel: {val_l1_mel:.4f}"
+            f"Val L1 Linear: {val_l1_linear:.4f}, Val L1 Mel: {val_l1_mel:.4f}"
         )
 
         # Save checkpoint
