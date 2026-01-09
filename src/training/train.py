@@ -21,6 +21,22 @@ The criterion used is Binary Cross-Entropy Loss (BCELoss) since the model output
 The Adam optimizer is used for training.
 """
 
+def mel_l1_loss(x, y, mel_fb):
+    """
+    x, y: (B, 1, F, T)
+    mel_fb: (F, M)
+    """
+
+    # Move frequency to last axis
+    rx = x.permute(0, 1, 3, 2)  # (B, 1, T, F)
+    ry = y.permute(0, 1, 3, 2)  # (B, 1, T, F)
+
+    # Apply Mel projection
+    pred_mel  = torch.matmul(rx, mel_fb)   # (B, 1, T, M)
+    clean_mel = torch.matmul(ry, mel_fb)   # (B, 1, T, M)
+
+    return torch.mean(torch.abs(pred_mel - clean_mel))
+
 def bce_loss(x, y):
     return nn.BCELoss()(x, y)
 
@@ -31,11 +47,13 @@ def custom_loss(bce, l1, lambda_, gamma_):
     # lambda BCE + gamma L1
     return lambda_ * bce + gamma_ * l1
 
-def evaluate(model, dataloader, criterion_bce, criterion_l1, device):
+def evaluate(model, dataloader, criterion_bce, linear_l1, mel_l1, device):
     model.eval()
     total_bce = 0.0
     total_l1  = 0.0
     n_batches = 0
+
+    mel_fb = torch.load(f"{ROOT}/src/training/mel_fb_{N_FFT}_{N_MELS}_{SAMPLE_RATE}.pt").to(device)
 
     with torch.no_grad():
         for batch in dataloader:
@@ -48,7 +66,10 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1, device):
             pred_mag  = pred_mask * mix_mag
 
             bce_loss = criterion_bce(pred_mask, ibm_target)
-            l1_loss  = criterion_l1(pred_mag, clean_mag)
+
+            l1_linear_loss  = linear_l1(pred_mag, clean_mag)
+            l1_mel_loss = mel_l1(pred_mag, clean_mag, mel_fb)
+            l1_loss = l1_linear_loss + ALPHA * l1_mel_loss
 
             total_bce += bce_loss.item()
             total_l1  += l1_loss.item()
@@ -72,6 +93,7 @@ def train(session_name: str):
 
     # 2. Load Data
     dataset = SpeechNoiseDataset(CLEAN_DIR, NOISE_DIR, snr_db=TARGET_SNR)
+    mel_fb = torch.load(f"{ROOT}/src/training/mel_fb_{N_FFT}_{N_MELS}_{SAMPLE_RATE}.pt").to(device)
 
     val_ratio = 0.15
     n_total = len(dataset)
@@ -138,8 +160,13 @@ def train(session_name: str):
             pred_mask = model(features)
             pred_mag = pred_mask * mix_mag
 
+            print(pred_mag.shape)
+            print(mel_fb.shape)
+
             bce = bce_loss(pred_mask, ibm)
-            l1 = l1_loss(pred_mag, clean_mag)
+            l1_linear = l1_loss(pred_mag, clean_mag)
+            l1_mel = mel_l1_loss(pred_mag, clean_mag, mel_fb)
+            l1 = l1_linear + ALPHA * l1_mel
 
             if avg_bce == 0.0:
                 avg_bce = bce.item()
@@ -156,7 +183,7 @@ def train(session_name: str):
         
         train_loss /= len(train_loader)
 
-        val_bce, val_l1 = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1=l1_loss, device=device)
+        val_bce, val_l1 = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1_linear=l1_loss, criterion_l1_mel=mel_l1_loss, device=device)
         
         print(
             f"Epoch {epoch} | "

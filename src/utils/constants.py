@@ -39,6 +39,9 @@ LEARNING_RATE = 0.001
 LAMBDA = 1.0
 GAMMA = 2.5
 
+N_MELS = 80
+ALPHA = 0.5  # Weight for mel-scale L1 loss
+
 PHASE_MODE = "GL"  # Options: "raw", "GL", "vocoder"
 GL_ITERS = 64
 
