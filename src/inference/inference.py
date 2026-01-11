@@ -162,13 +162,13 @@ with torch.no_grad():
             with open(log_csv_path, mode="w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(
-                    ["file_index", "noisy_snr_db", "enhanced_snr_db"]
+                    ["file", "noisy_snr_db", "enhanced_snr_db"]
                 )
 
         with open(log_csv_path, mode="a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(
-                [idx, f"{snr_noisy:.2f}", f"{snr_enhanced:.2f}"]
+                [fname, f"{snr_noisy:.2f}", f"{snr_enhanced:.2f}"]
             )
 
 print("Inference Complete.")
