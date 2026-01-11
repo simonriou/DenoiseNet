@@ -1,6 +1,5 @@
-import glob
 import torch
-import torchaudio
+from speechbrain.inference.vocoders import HIFIGAN
 from torchaudio.transforms import GriffinLim
 from torch.utils.data import DataLoader
 from models.DenoiseUNet import DenoiseUNet
@@ -9,6 +8,7 @@ from utils.constants import *
 from utils.save_wav import save_wav
 from utils.compute_snr import compute_snr
 from utils.pad_collate import pad_collate
+from utils.magnitude_to_mel import magnitude_to_mel
 import os
 import csv
 import numpy as np
@@ -97,8 +97,22 @@ with torch.no_grad():
                 length=batch["clean_audio"].shape[1]
             )
         elif PHASE_MODE.lower() == 'vocoder':
-            print("Vocoder phase reconstruction not implemented yet.")
-            raise NotImplementedError
+            raise NotImplementedError("Vocoder mode not implemented yet.")
+            print("Using neural vocoder for reconstruction.")
+            # Extract mel spectrogram
+            mel_fb = torch.load(f'mel_fb_{N_FFT}_{N_MELS}_{SAMPLE_RATE}.pt').to(device)  # (n_mels, F)
+            enhanced_mel = magnitude_to_mel(enhanced_mag, mel_fb)  # (1, 1, M, T)
+            hifi_gan = HIFIGAN.from_hparams(
+                source="speechbrain/tts-hifigan-libritts-16kHz",
+                savedir="pretrained_models/tts-hifigan-libritts-16kHz",
+                run_opts={"device":"cuda"} if torch.cuda.is_available() else {"device":"cpu"}
+            )
+
+            waveform = hifi_gan.decode_batch(enhanced_mel.squeeze(0)) # (1, 1, T)
+            enhanced_audio = waveform.squeeze(1) # remove channel dim -> (1, T)
+
+            waveform = hifi_gan.decode_batch(magnitude_to_mel(mix_mag, mel_fb).squeeze(0))
+            noisy_audio = waveform.squeeze(1)
         else:
             raise ValueError(f"Unknown PHASE_MODE: {PHASE_MODE}")
 

@@ -13,7 +13,8 @@ def create_mel_filterbank(
         f_max = sample_rate / 2,
         n_mels = n_mels,
         sample_rate = sample_rate,
-        norm = "slaney"
+        norm = "slaney",
+        mel_scale='htk'
     )
     return mel_fb  # (n_mels, F)
 
