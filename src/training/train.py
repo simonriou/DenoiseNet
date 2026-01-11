@@ -110,7 +110,7 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
 
     avg_waveform = total_waveform / n_batches
 
-    return avg_bce, avg_l1, avg_l1_linear, avg_l1_mel, avg_waveform
+    return avg_bce, avg_l1_linear, avg_l1_mel, avg_waveform
 
 def train(session_name: str):
     # 1. Setup Device
