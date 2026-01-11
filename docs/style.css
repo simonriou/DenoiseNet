@@ -1,73 +1,120 @@
 body {
+    font-family: "Helvetica", Arial, sans-serif;
     margin: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-color: #ffffff;
-    color: #111;
-}
-
-.site-header {
-    text-align: center;
-    font-family: "Arial", sans-serif;
-    font-size: 2em;
-    color: #000000;       /* slightly darker than body text */
-    margin-bottom: 20px;
     padding: 0;
+    background: #fff;
+    color: #222;
 }
 
 .container {
-    max-width: 900px;
-    margin: 40px auto;
-    padding: 0 20px;
+    width: 90%;
+    max-width: 1000px;
+    margin: 20px auto;
 }
 
-h1 {
-    font-size: 1.9rem;
-    margin-bottom: 0.5em;
-}
-
-h2 {
+.site-header {
+    background: none;
+    text-align: center;
+    padding: 8px 0;
     font-size: 1.3rem;
-    margin-bottom: 0.8em;
+    font-weight: 500;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 20px;
+}
+
+h2, h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-weight: 500;
 }
 
 .intro {
     font-size: 0.95rem;
     line-height: 1.5;
-    color: #333;
-    margin-bottom: 40px;
-}
-
-.sample {
-    margin-bottom: 50px;
-    padding-top: 20px;
-    border-top: 1px solid #ddd;
 }
 
 .audio-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 10px;
 }
 
 .audio-item {
+    flex: 1 1 200px;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    font-size: 0.9rem;
 }
 
-.audio-item span {
-    font-size: 0.85rem;
-    margin-bottom: 6px;
-    color: #444;
-}
-
-audio {
+.audio-item audio {
+    margin-top: 5px;
     width: 100%;
 }
 
-footer {
-    margin-top: 60px;
-    padding-top: 20px;
-    border-top: 1px solid #ddd;
+.spectro-toggle-container {
+    text-align: center;
+    margin: 10px 0 15px;
+}
+
+.toggle-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #333;
+    padding: 4px 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.toggle-btn:hover {
+    background: #f0f0f0;
+    color: #000;
+}
+
+.audio-spectrograms {
+    display: flex;
+    flex-direction: column; /* stack vertically */
+    align-items: center;    /* center horizontally */
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.spectro-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* center image and caption */
+    text-align: center;  /* fallback for caption */
+}
+
+.audio-spectrograms img {
+    width: 80%;
+    max-width: 700px;
+    height: auto;
+    display: block;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.spectro-caption {
     font-size: 0.85rem;
-    color: #444;
+    color: #333;
+    margin-top: 4px;
+    display: block;
+}
+
+.hidden {
+    display: none;
+}
+
+footer {
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: 30px;
+    border-top: 1px solid #ccc;
+    padding-top: 10px;
+    color: #555;
 }

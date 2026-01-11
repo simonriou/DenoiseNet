@@ -7,7 +7,6 @@
 </head>
 <body>
 
-<!-- ================= Header ================= -->
 <header class="site-header">
     <p><b>DenoiseNet</b></p>
 </header>
@@ -17,22 +16,17 @@
     <h2>Speech Denoising – Audio Sample Results</h2>
 
     <p class="intro">
-        This page presents qualitative audio results of out DenoiseNet model for three speech samples corrupted
+        This page presents qualitative audio results of our DenoiseNet model for three speech samples corrupted
         by babble noise at <b>0 dB SNR</b>. For each sample, the same noise realization is used across all
         degraded and enhanced versions. A clean reference signal is provided for
         perceptual comparison. The following variants are available:
         <br>
-        (i) noisy input,
-        (ii) early denoising model (baseline),
-        (iii) final denoising model,
-        (iv) clean reference.
+        (i) noisy input, (ii) early denoising model, (iii) final denoising model, (iv) clean reference.
     </p>
-
-
 
     <!-- ================= Sample 1 ================= -->
     <section class="sample">
-        <h2>Sample 1 — Speaker LJ001-0003</h2>
+        <h3>Sample 1 — Speaker LJ001-0003</h3>
 
         <div class="audio-grid">
             <div class="audio-item">
@@ -63,11 +57,32 @@
                 </audio>
             </div>
         </div>
+
+        <!-- Toggle Button -->
+        <div class="spectro-toggle-container">
+            <button class="toggle-btn" onclick="toggleSpecs(this)">Show Spectrograms</button>
+        </div>
+
+        <!-- Spectrograms (hidden by default) -->
+        <div class="audio-spectrograms hidden">
+            <div class="spectro-item">
+                <img src="images/F3noisy_LJ001-0003_noise.png" alt="Noisy Spectrogram">
+                <span class="spectro-caption">Noisy</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/F3denoised_LJ001-0003_new.png" alt="Final Denoised Spectrogram">
+                <span class="spectro-caption">Final Denoised</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/LJ001-0003.png" alt="Clean Spectrogram">
+                <span class="spectro-caption">Clean Reference</span>
+            </div>
+        </div>
     </section>
 
     <!-- ================= Sample 2 ================= -->
     <section class="sample">
-        <h2>Sample 2 — Speaker Russian Man 1</h2>
+        <h3>Sample 2 — Speaker Russian Man 1</h3>
 
         <div class="audio-grid">
             <div class="audio-item">
@@ -98,11 +113,31 @@
                 </audio>
             </div>
         </div>
+
+        <div class="spectro-toggle-container">
+            <button class="toggle-btn" onclick="toggleSpecs(this)">Show Spectrograms</button>
+        </div>
+
+        <div class="audio-spectrograms hidden">
+            <div class="spectro-item">
+                <img src="images/F2noisy_Russian_Man1_noise.png" alt="Noisy Spectrogram">
+                <span class="spectro-caption">Noisy</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/F2denoised_Russian_Man1_new.png" alt="Final Denoised Spectrogram">
+                <span class="spectro-caption">Final Denoised</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/Russian_Man1.png" alt="Clean Spectrogram">
+                <span class="spectro-caption">Clean Reference</span>
+            </div>
+        </div>
+        
     </section>
 
     <!-- ================= Sample 3 ================= -->
     <section class="sample">
-        <h2>Sample 3 — Speaker LJ003-0011</h2>
+        <h3>Sample 3 — Speaker LJ003-0011</h3>
 
         <div class="audio-grid">
             <div class="audio-item">
@@ -133,19 +168,50 @@
                 </audio>
             </div>
         </div>
+
+        <div class="spectro-toggle-container">
+            <button class="toggle-btn" onclick="toggleSpecs(this)">Show Spectrograms</button>
+        </div>
+
+        <div class="audio-spectrograms hidden">
+            <div class="spectro-item">
+                <img src="images/F1noisy_LJ003-0011_noise.png" alt="Noisy Spectrogram">
+                <span class="spectro-caption">Noisy</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/F1denoised_LJ003-0011_new.png" alt="Final Denoised Spectrogram">
+                <span class="spectro-caption">Final Denoised</span>
+            </div>
+            <div class="spectro-item">
+                <img src="images/LJ003-0011.png" alt="Clean Spectrogram">
+                <span class="spectro-caption">Clean Reference</span>
+            </div>
+        </div>
     </section>
 
     <footer>
         <p>
             Clean references correspond to the original speech signals prior to noise
             addition. All enhanced signals are compared using identical babble noise
-            realizations for each speaker.
-
-            Simon Riou & Hamza Bouasria – 2026
+            realizations per speaker.
+            <br>Simon Riou & Hamza Bouasria – 2026
         </p>
     </footer>
 
 </div>
+
+<script>
+function toggleSpecs(btn) {
+    const specGrid = btn.parentElement.nextElementSibling;
+    if (specGrid.classList.contains("hidden")) {
+        specGrid.classList.remove("hidden");
+        btn.textContent = "Hide Spectrograms";
+    } else {
+        specGrid.classList.add("hidden");
+        btn.textContent = "Show Spectrograms";
+    }
+}
+</script>
 
 </body>
 </html>
