@@ -38,7 +38,7 @@ LEARNING_RATE = 0.001
 
 LAMBDA = 1.0
 GAMMA = 0.75
-ZETA = 0.5
+ZETA = 10.0
 
 N_MELS = 80
 ALPHA = 10.0  # Weight for mel-scale L1 loss
