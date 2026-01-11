@@ -60,6 +60,7 @@ with torch.no_grad():
         features      = batch["features"].to(device)      # [1, 1, F, T]
         mix_mag       = batch["mix_mag"].to(device)       # [1, 1, F, T]
         clean_audio   = batch["clean_audio"][0].cpu().numpy()
+        fname      = batch["filename"][0]
 
         # Predict mask
         pred_mask = model(features)                        # [1, 1, F, T]
@@ -126,14 +127,14 @@ with torch.no_grad():
         if SAVE_DENOISED:
             save_wav(
                 enhanced_audio,
-                denoised_dir / f"denoised_{idx}.wav",
+                denoised_dir / f"denoised_{fname}.wav",
                 sample_rate=SAMPLE_RATE
             )
 
         if SAVE_NOISY:
             save_wav(
                 noisy_audio,
-                denoised_dir / f"noisy_{idx}.wav",
+                denoised_dir / f"noisy_{fname}.wav",
                 sample_rate=SAMPLE_RATE
             )
 
@@ -147,7 +148,7 @@ with torch.no_grad():
         snr_enhanced = compute_snr(clean_audio, enhanced_audio)
 
         print(
-            f"File {idx}: "
+            f"File {fname}: "
             f"Noisy SNR = {snr_noisy:.2f} dB | "
             f"Enhanced SNR = {snr_enhanced:.2f} dB"
         )

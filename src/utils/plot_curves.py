@@ -3,6 +3,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def plot_losses(csv_path, output_path=None):
+    # ----------------------------
+    # Load data
+    # ----------------------------
     df = pd.read_csv(csv_path)
 
     required_cols = {"epoch", "train_loss"}
@@ -10,47 +13,70 @@ def plot_losses(csv_path, output_path=None):
         raise ValueError(
             f"CSV must contain at least the following columns: {required_cols}"
         )
-    
+
     epoch = df["epoch"]
+    loss_columns = [col for col in df.columns if col != "epoch"]
 
-    loss_columns = [col for col in df.columns if col not in ("epoch",)]
+    # ----------------------------
+    # Matplotlib configuration (LaTeX-friendly)
+    # ----------------------------
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.size": 6,
+        "axes.labelsize": 6,
+        "axes.titlesize": 8,
+        "legend.fontsize": 5,
+        "xtick.labelsize": 5,
+        "ytick.labelsize": 5,
+        "figure.dpi": 300,
+        "savefig.dpi": 300,
+    })
 
-    plt.figure(figsize=(8, 5))
+    # Typical single-column width (~8.5 cm)
+    fig, ax = plt.subplots(figsize=(3.35, 2.6))
 
-
+    # ----------------------------
+    # Plot curves
+    # ----------------------------
     for col in loss_columns:
-        if col == "train_loss" or col == "val_l1":
+        if col in ("train_loss", "val_l1"):
             continue
-        elif col == "val_l1_mel" or col == "val_waveform":
-            plt.plot(
+
+        if col in ("val_l1_mel", "val_waveform"):
+            ax.plot(
                 epoch,
-                df[col] * 10,
-                linewidth=2.0,
-                linestyle="--",
-                alpha=0.7,
-                label=f"Validation - {col} (x10)"
+                df[col] * 10.0,
+                linewidth=1.8,
+                label=f"{col.replace('_', ' ').replace('val', '')} (x10)"
             )
         else:
-            plt.plot(
+            ax.plot(
                 epoch,
                 df[col],
-                linewidth=2.0,
-                linestyle="--",
-                alpha=0.7,
-                label=f"Validation - {col}"
+                linewidth=1.8,
+                label=col.replace('_', ' ').replace('val', '')
             )
 
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss Value")
-    plt.title("Training and Validation Loss Curves")
-    plt.legend()
-    plt.grid(True, linestyle=":", alpha=0.6)
-    plt.tight_layout()
+    # ----------------------------
+    # Axes, grid, legend
+    # ----------------------------
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss value")
 
+    ax.grid(True, which="major", linestyle=":", linewidth=0.6, alpha=0.7)
+    ax.legend(frameon=False, loc="best")
+
+    fig.tight_layout(pad=0.5)
+
+    # ----------------------------
+    # Save / show
+    # ----------------------------
     if output_path is not None:
-        plt.savefig(output_path)
+        fig.savefig(output_path, bbox_inches="tight")
     else:
         plt.show()
+
+    plt.close(fig)
 
 
 def main():
@@ -66,11 +92,12 @@ def main():
         "--output",
         type=str,
         default=None,
-        help="Path to save the output plot image. If not provided, the plot will be displayed on screen."
+        help="Path to save the output figure (PDF/PNG recommended)."
     )
 
     args = parser.parse_args()
     plot_losses(args.csv, args.output)
+
 
 if __name__ == "__main__":
     main()

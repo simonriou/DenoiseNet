@@ -184,11 +184,14 @@ class SpeechNoiseDataset(Dataset):
             "clean_mag": clean_mag.unsqueeze(0),
             "mix_mag": mix_mag.unsqueeze(0),
             "mix_phase": mix_phase.unsqueeze(0),
-            "clean_audio": clean_audio.unsqueeze(0)
+            "clean_audio": clean_audio.unsqueeze(0),
+            "filename": None
         }
 
         if self.mode == 'test':
+            print("Test mode: adding filename to sample.")
             sample["mix_phase"] = mix_phase.unsqueeze(0)
             sample["clean_audio"] = clean_audio.unsqueeze(0)
+            sample["filename"] = os.path.basename(clean_path).split('.')[0]
         
         return sample

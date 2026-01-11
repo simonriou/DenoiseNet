@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DenoiseNet – Audio Results</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= Header ================= -->
+<header class="site-header">
+    <p><b>DenoiseNet</b></p>
+</header>
+
+<div class="container">
+
+    <h2>Speech Denoising – Audio Sample Results</h2>
+
+    <p class="intro">
+        This page presents qualitative audio results of out DenoiseNet model for three speech samples corrupted
+        by babble noise at <b>0 dB SNR</b>. For each sample, the same noise realization is used across all
+        degraded and enhanced versions. A clean reference signal is provided for
+        perceptual comparison. The following variants are available:
+        <br>
+        (i) noisy input,
+        (ii) early denoising model (baseline),
+        (iii) final denoising model,
+        (iv) clean reference.
+    </p>
+
+
+
+    <!-- ================= Sample 1 ================= -->
+    <section class="sample">
+        <h2>Sample 1 — Speaker LJ001-0003</h2>
+
+        <div class="audio-grid">
+            <div class="audio-item">
+                <span>Noisy</span>
+                <audio controls>
+                    <source src="audio/F3noisy_LJ001-0003_noise.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Early denoising</span>
+                <audio controls>
+                    <source src="audio/F3denoised_LJ001-0003_old.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Final denoising</span>
+                <audio controls>
+                    <source src="audio/F3denoised_LJ001-0003_new.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Clean reference</span>
+                <audio controls>
+                    <source src="audio/LJ001-0003.wav" type="audio/wav">
+                </audio>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= Sample 2 ================= -->
+    <section class="sample">
+        <h2>Sample 2 — Speaker Russian Man 1</h2>
+
+        <div class="audio-grid">
+            <div class="audio-item">
+                <span>Noisy</span>
+                <audio controls>
+                    <source src="audio/F2noisy_Russian_Man1_noise.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Early denoising</span>
+                <audio controls>
+                    <source src="audio/F2denoised_Russian_Man1_old.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Final denoising</span>
+                <audio controls>
+                    <source src="audio/F3denoised_Russian_Man1_new.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Clean reference</span>
+                <audio controls>
+                    <source src="audio/Russian_Man1.wav" type="audio/wav">
+                </audio>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= Sample 3 ================= -->
+    <section class="sample">
+        <h2>Sample 3 — Speaker LJ003-0011</h2>
+
+        <div class="audio-grid">
+            <div class="audio-item">
+                <span>Noisy</span>
+                <audio controls>
+                    <source src="audio/F1noisy_LJ003-0011_noise.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Early denoising</span>
+                <audio controls>
+                    <source src="audio/F1denoised_LJ003-0011_old.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Final denoising</span>
+                <audio controls>
+                    <source src="audio/F1denoised_LJ003-0011_new.wav" type="audio/wav">
+                </audio>
+            </div>
+
+            <div class="audio-item">
+                <span>Clean reference</span>
+                <audio controls>
+                    <source src="audio/LJ003-0011.wav" type="audio/wav">
+                </audio>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>
+            Clean references correspond to the original speech signals prior to noise
+            addition. All enhanced signals are compared using identical babble noise
+            realizations for each speaker.
+
+            Simon Riou & Hamza Bouasria – 2026
+        </p>
+    </footer>
+
+</div>
+
+</body>
+</html>

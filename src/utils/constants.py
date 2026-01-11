@@ -28,7 +28,7 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "waveform-1"
+MODEL_NAME = "waveform-3"
 SAVE_DENOISED = True
 SAVE_NOISY = True
 

@@ -8,11 +8,9 @@ This is used for batching in the data loader when dealing with audio data of var
 
 def pad_collate(batch):
     batch_size = len(batch)
-
     collated = {}
 
     # --- Spectrogram padding ---
-    max_spec_len = batch[0]["features"].shape[2]
     freq_bins = batch[0]["features"].shape[1]
 
     for key in ["features", "ibm", "mix_mag", "clean_mag", "mix_phase"]:
@@ -33,21 +31,22 @@ def pad_collate(batch):
 
         collated[key] = padded
 
-    # --- Waveform padding (ONLY if present) ---
+    # --- Waveform padding ---
     if batch[0].get("clean_audio") is not None:
-        # Ensure 1D waveforms
         clean_wavs = [item["clean_audio"].view(-1) for item in batch]
-
         max_wav_len = max(wav.shape[0] for wav in clean_wavs)
 
         wav_padded = torch.zeros(batch_size, max_wav_len)
 
         for i, wav in enumerate(clean_wavs):
-            curr_len = wav.shape[0]
-            wav_padded[i, :curr_len] = wav
+            wav_padded[i, :wav.shape[0]] = wav
 
         collated["clean_audio"] = wav_padded
     else:
         collated["clean_audio"] = None
+
+    # --- Metadata (NO padding) ---
+    if "filename" in batch[0]:
+        collated["filename"] = [item["filename"] for item in batch]
 
     return collated
