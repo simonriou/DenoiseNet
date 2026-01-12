@@ -12,6 +12,7 @@ from utils.magnitude_to_mel import magnitude_to_mel
 import os
 import csv
 import numpy as np
+import time
 
 # 1. Prepare dataset
 dataset = SpeechNoiseDataset(
@@ -54,6 +55,7 @@ denoised_dir = NOISE_ENHANCED_DIR
 os.makedirs(denoised_dir, exist_ok=True)
 
 # 5. Inference loop
+total_time = 0.0
 with torch.no_grad():
     for idx, batch in enumerate(loader):
 
@@ -61,6 +63,8 @@ with torch.no_grad():
         mix_mag       = batch["mix_mag"].to(device)       # [1, 1, F, T]
         clean_audio   = batch["clean_audio"][0].cpu().numpy()
         fname      = batch["filename"][0]
+
+        start_time = time.time()
 
         # Predict mask
         pred_mask = model(features)                        # [1, 1, F, T]
@@ -116,6 +120,12 @@ with torch.no_grad():
             noisy_audio = waveform.squeeze(1)
         else:
             raise ValueError(f"Unknown PHASE_MODE: {PHASE_MODE}")
+        
+        end_time = time.time()
+        inference_time = end_time - start_time
+        total_time += inference_time
+
+        print(f"Processed file {fname} in {inference_time:.3f} seconds.")
 
         enhanced_audio = enhanced_audio.cpu().numpy()
         enhanced_audio = np.clip(enhanced_audio, -1.0, 1.0)
@@ -171,4 +181,6 @@ with torch.no_grad():
                 [fname, f"{snr_noisy:.2f}", f"{snr_enhanced:.2f}"]
             )
 
+average_time = total_time / len(loader)
+print(f"Average inference time per file: {average_time:.3f} seconds.")
 print("Inference Complete.")

@@ -3,14 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 """
-This is the Denoising U-Net model definition.
+This is the DenoiseNet model definition.
 It follows the standard U-Net architecture with an encoder-decoder structure and skip connections.
 The model takes as input a log-magnitude spectrogram of shape [Batch, 1, Freq, Time]
 and outputs an ideal binary mask (IBM) of the same shape to be applied to the noisy spectrogram.
 The U-Net consists of:
-- Encoder: 3 downsampling blocks, each with Conv2D -> BatchNorm -> ReLU, followed by MaxPooling.
+- Encoder: 3 downsampling blocks, each with Conv2D -> GroupNorm -> ReLU, followed by MaxPooling.
 - Bottleneck: A deeper Conv2D block to capture complex features.
-- Decoder: 3 upsampling blocks, each with Conv2D -> BatchNorm -> ReLU, followed by interpolation upsampling.
+- Decoder: 3 upsampling blocks, each with Conv2D -> GroupNorm -> ReLU, followed by interpolation upsampling.
 - Skip Connections: Concatenation of encoder outputs to decoder inputs at each level.
 - Output Layer: A final Conv2D layer followed by a Sigmoid activation to produce the mask in [0, 1].
 
