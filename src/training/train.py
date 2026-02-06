@@ -88,7 +88,7 @@ def evaluate(model, dataloader, criterion_l1_linear, criterion_l1_mel, device):
             
             reconstructed_audio = torch.stack(reconstructed_audio, dim=0).to(device)
 
-                    complex_l1 = complex_l1_loss(pred_complex_norm, clean_complex)
+            complex_l1 = complex_l1_loss(pred_complex_norm, clean_complex)
 
             clean_mag = clean_complex.abs().unsqueeze(1)
             l1_linear_loss = criterion_l1_linear(pred_mag, clean_mag)
@@ -96,14 +96,14 @@ def evaluate(model, dataloader, criterion_l1_linear, criterion_l1_mel, device):
             l1_loss = l1_linear_loss + ALPHA * l1_mel_loss
             waveform_loss = criterion_l1_linear(reconstructed_audio, clean_audio)
 
-                    total_complex_l1 += complex_l1.item()
+            total_complex_l1 += complex_l1.item()
             total_l1  += l1_loss.item()
             total_l1_linear += l1_linear_loss.item()
             total_l1_mel += l1_mel_loss.item()
             total_waveform += waveform_loss.item()
             n_batches += 1
 
-                avg_complex_l1 = total_complex_l1 / n_batches
+    avg_complex_l1 = total_complex_l1 / n_batches
     avg_l1  = total_l1 / n_batches
 
     avg_l1_linear = total_l1_linear / n_batches
