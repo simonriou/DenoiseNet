@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from utils.constants import *
 from training.dataset import SpeechNoiseDataset
-from models.DenoiseUNet import DenoiseUNet
+from models.DCUNet import DCUNet
 from utils.pad_collate import pad_collate
 
 """
@@ -17,7 +17,8 @@ This is the main training script for the speech denoising model.
 It sets up the dataset, dataloader, model, loss function, and optimizer.
 It runs the training loop for a specified number of epochs, printing progress and saving model checkpoints.
 
-The criterion used is Binary Cross-Entropy Loss (BCELoss) since the model outputs ideal binary masks (IBM).
+The model predicts complex ratio masks on STFTs and is trained with a multi-term loss
+combining complex L1, linear/mel magnitude L1, and waveform L1.
 The Adam optimizer is used for training.
 """
 
@@ -37,19 +38,19 @@ def mel_l1_loss(x, y, mel_fb):
 
     return torch.mean(torch.abs(pred_mel - clean_mel))
 
-def bce_loss(x, y):
-    return nn.BCELoss()(x, y)
-
 def l1_loss(x, y):
     return nn.L1Loss()(x, y)
 
-def custom_loss(bce, l1_linear, l1_mel, waveform, lambda_, gamma_, omega_, zeta_):
-    # lambda BCE + gamma L1 + zeta Waveform
-    return lambda_ * bce + gamma_ * l1_linear + omega_ * l1_mel + zeta_ * waveform
+def complex_l1_loss(pred, target):
+    return torch.mean(torch.abs(pred.real - target.real) + torch.abs(pred.imag - target.imag))
 
-def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1_mel, device):
+def custom_loss(complex_l1, l1_linear, l1_mel, waveform, lambda_, gamma_, omega_, zeta_):
+    # lambda Complex L1 + gamma L1 + omega Mel + zeta Waveform
+    return lambda_ * complex_l1 + gamma_ * l1_linear + omega_ * l1_mel + zeta_ * waveform
+
+def evaluate(model, dataloader, criterion_l1_linear, criterion_l1_mel, device):
     model.eval()
-    total_bce = 0.0
+    total_complex_l1 = 0.0
     total_l1  = 0.0
     total_l1_linear = 0.0
     total_l1_mel = 0.0
@@ -61,20 +62,19 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
     with torch.no_grad():
         for batch in dataloader:
             features     = batch["features"].to(device)
-            ibm_target   = batch["ibm"].to(device)
-            mix_mag      = batch["mix_mag"].to(device)
-            mix_phase    = batch["mix_phase"].to(device)
-            clean_mag    = batch["clean_mag"].to(device)
             clean_audio  = batch["clean_audio"].to(device)
+            mix_complex  = batch["mix_complex"].to(device).squeeze(1)
+            clean_complex = batch["clean_complex"].to(device).squeeze(1)
+            mix_scale = batch["mix_scale"].to(device).view(-1, 1, 1)
 
             pred_mask = model(features)
-            pred_mag  = pred_mask * mix_mag
+            pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
+            pred_complex_norm = pred_mask_complex * mix_complex
+            pred_mag = pred_complex_norm.abs().unsqueeze(1)
 
             reconstructed_audio = []
             for b in range(pred_mag.shape[0]):
-                mag = pred_mag[b, 0]
-                phase = mix_phase[b, 0]  # remove channel dim
-                complex_spec = mag * torch.exp(1j * phase)
+                complex_spec = pred_complex_norm[b] * mix_scale[b]
 
                 audio = torch.istft(
                     complex_spec,
@@ -88,21 +88,22 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
             
             reconstructed_audio = torch.stack(reconstructed_audio, dim=0).to(device)
 
-            bce_loss = criterion_bce(pred_mask, ibm_target)
+                    complex_l1 = complex_l1_loss(pred_complex_norm, clean_complex)
 
+            clean_mag = clean_complex.abs().unsqueeze(1)
             l1_linear_loss = criterion_l1_linear(pred_mag, clean_mag)
             l1_mel_loss = criterion_l1_mel(pred_mag, clean_mag, mel_fb)
             l1_loss = l1_linear_loss + ALPHA * l1_mel_loss
             waveform_loss = criterion_l1_linear(reconstructed_audio, clean_audio)
 
-            total_bce += bce_loss.item()
+                    total_complex_l1 += complex_l1.item()
             total_l1  += l1_loss.item()
             total_l1_linear += l1_linear_loss.item()
             total_l1_mel += l1_mel_loss.item()
             total_waveform += waveform_loss.item()
             n_batches += 1
 
-    avg_bce = total_bce / n_batches
+                avg_complex_l1 = total_complex_l1 / n_batches
     avg_l1  = total_l1 / n_batches
 
     avg_l1_linear = total_l1_linear / n_batches
@@ -110,7 +111,7 @@ def evaluate(model, dataloader, criterion_bce, criterion_l1_linear, criterion_l1
 
     avg_waveform = total_waveform / n_batches
 
-    return avg_bce, avg_l1_linear, avg_l1_mel, avg_waveform
+    return avg_complex_l1, avg_l1_linear, avg_l1_mel, avg_waveform
 
 def train(session_name: str):
     # 1. Setup Device
@@ -155,7 +156,7 @@ def train(session_name: str):
     )
     
     # 3. Model & Loss
-    model = DenoiseUNet().to(device)
+    model = DCUNet().to(device)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Create checkpoint directory for this session
@@ -169,10 +170,10 @@ def train(session_name: str):
     print(f"Logging training progress to {log_file_path}")
     with open(log_file_path, mode='w', newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["epoch", "train_loss", "val_bce", "val_l1_linear", "val_l1_mel", "val_waveform"])
+        writer.writerow(["epoch", "train_loss", "val_complex_l1", "val_l1_linear", "val_l1_mel", "val_waveform"])
 
     # Initialize running averages for losses
-    avg_bce = 0.0
+    avg_complex_l1 = 0.0
     avg_l1 = 0.0
     avg_waveform = 0.0
     alpha = 0.99 # smoothing factor for running avg
@@ -186,22 +187,21 @@ def train(session_name: str):
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
             features = batch["features"].to(device)
-            mix_mag = batch["mix_mag"].to(device)
-            mix_phase = batch["mix_phase"].to(device)
-            clean_mag = batch["clean_mag"].to(device)
-            ibm = batch["ibm"].to(device)
             clean_audio = batch["clean_audio"].to(device)
+            mix_complex = batch["mix_complex"].to(device).squeeze(1)
+            clean_complex = batch["clean_complex"].to(device).squeeze(1)
+            mix_scale = batch["mix_scale"].to(device).view(-1, 1, 1)
 
             optimizer.zero_grad()
             pred_mask = model(features)
-            pred_mag = pred_mask * mix_mag
+            pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
+            pred_complex_norm = pred_mask_complex * mix_complex
+            pred_mag = pred_complex_norm.abs().unsqueeze(1)
 
             reconstructed_audio = []
 
             for b in range(pred_mag.shape[0]):
-                mag = pred_mag[b, 0]
-                phase = mix_phase[b, 0] # remove channel dim
-                complex_spec = mag * torch.exp(1j * phase)
+                complex_spec = pred_complex_norm[b] * mix_scale[b]
 
                 audio = torch.istft(
                     complex_spec,
@@ -215,27 +215,34 @@ def train(session_name: str):
 
             reconstructed_audio = torch.stack(reconstructed_audio, dim=0).to(device)
 
-            # print(pred_mag.shape)
-            # print(mel_fb.shape)
-
-            bce = bce_loss(pred_mask, ibm)
+            complex_l1 = complex_l1_loss(pred_complex_norm, clean_complex)
+            clean_mag = clean_complex.abs().unsqueeze(1)
             l1_linear = l1_loss(pred_mag, clean_mag)
             l1_mel = mel_l1_loss(pred_mag, clean_mag, mel_fb)
             l1 = l1_linear + ALPHA * l1_mel
             waveform_loss = l1_loss(reconstructed_audio, clean_audio)
 
-            if avg_bce == 0.0:
-                avg_bce = bce.item()
+            if avg_complex_l1 == 0.0:
+                avg_complex_l1 = complex_l1.item()
                 avg_l1_linear = l1_linear.item()
                 avg_l1_mel = l1_mel.item()
                 avg_waveform = waveform_loss.item()
             else:
-                avg_bce = alpha * avg_bce + (1 - alpha) * bce.item()
+                avg_complex_l1 = alpha * avg_complex_l1 + (1 - alpha) * complex_l1.item()
                 avg_l1_linear = alpha * avg_l1_linear + (1 - alpha) * l1_linear.item()
                 avg_l1_mel = alpha * avg_l1_mel + (1 - alpha) * l1_mel.item()
                 avg_waveform = alpha * avg_waveform + (1 - alpha) * waveform_loss.item()
 
-            loss = custom_loss((bce / (avg_bce + 1e-8)), (l1_linear / (avg_l1_linear + 1e-8)), (l1_mel / (avg_l1_mel + 1e-8)), (waveform_loss / (avg_waveform + 1e-8)), LAMBDA, GAMMA, OMEGA, ZETA)
+            loss = custom_loss(
+                (complex_l1 / (avg_complex_l1 + 1e-8)),
+                (l1_linear / (avg_l1_linear + 1e-8)),
+                (l1_mel / (avg_l1_mel + 1e-8)),
+                (waveform_loss / (avg_waveform + 1e-8)),
+                LAMBDA,
+                GAMMA,
+                OMEGA,
+                ZETA,
+            )
             loss.backward()
             optimizer.step()
             
@@ -243,12 +250,18 @@ def train(session_name: str):
         
         train_loss /= len(train_loader)
 
-        val_bce, val_l1_linear, val_l1_mel, val_waveform = evaluate(model, val_loader, criterion_bce=bce_loss, criterion_l1_linear=l1_loss, criterion_l1_mel=mel_l1_loss, device=device)
+        val_complex_l1, val_l1_linear, val_l1_mel, val_waveform = evaluate(
+            model,
+            val_loader,
+            criterion_l1_linear=l1_loss,
+            criterion_l1_mel=mel_l1_loss,
+            device=device,
+        )
         
         print(
             f"Epoch {epoch} | "
             f"Train Loss: {train_loss:.4f} | "
-            f"Val BCE: {val_bce:.4f}, Val L1 Linear: {val_l1_linear:.4f}, Val L1 Mel: {val_l1_mel:.4f}, Val Waveform: {val_waveform:.4f}"
+            f"Val Complex L1: {val_complex_l1:.4f}, Val L1 Linear: {val_l1_linear:.4f}, Val L1 Mel: {val_l1_mel:.4f}, Val Waveform: {val_waveform:.4f}"
         )
 
         # Save checkpoint
@@ -258,7 +271,7 @@ def train(session_name: str):
         # Log to CSV
         with open(log_file_path, mode='a', newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([epoch, train_loss, val_bce, val_l1_linear, val_l1_mel, val_waveform])
+            writer.writerow([epoch, train_loss, val_complex_l1, val_l1_linear, val_l1_mel, val_waveform])
 
         # If final epoch, also save final model
         if epoch == EPOCHS - 1:

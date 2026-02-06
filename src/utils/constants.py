@@ -44,7 +44,7 @@ ZETA = 0.8 # L1 Waveform
 N_MELS = 80
 ALPHA = 10.0  # Weight for mel-scale L1 loss
 
-PHASE_MODE = "raw"  # Options: "raw", "GL", "vocoder"
+PHASE_MODE = "complex"  # Options: "complex", "raw", "GL", "vocoder"
 GL_ITERS = 64
 
 DEBUG = False

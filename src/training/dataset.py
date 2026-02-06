@@ -13,9 +13,9 @@ if DEBUG:
 """
 This Dataset class loads clean speech files and noise files from specified directories.
 It mixes them at a specified SNR to create noisy mixtures.
-It computes log-magnitude spectrogram features and ideal binary masks (IBM) for training a denoising model.
+It computes complex STFT features and ideal binary masks (IBM) for training a denoising model.
 The __getitem__ method returns a tuple (features, ibm) where:
-- features: Tensor of shape [1, Freq, Time] representing the normalized log-magnitude spectrogram of the noisy mixture.
+- features: Tensor of shape [2, Freq, Time] representing normalized real/imag parts of the noisy mixture STFT.
 - ibm: Tensor of shape [1, Freq, Time] representing the ideal binary mask (1 if clean > noise, else 0).
 
 Important notice: Audio files are stored as int16 .pt tensors to save space and loading time.
@@ -66,6 +66,17 @@ class SpeechNoiseDataset(Dataset):
                           win_length=WIN_LENGTH, window=window, 
                           return_complex=True)
         return torch.angle(stft)
+
+    def _get_stft_complex(self, tensor):
+        window = torch.hann_window(WIN_LENGTH, device=tensor.device)
+        return torch.stft(
+            tensor,
+            n_fft=N_FFT,
+            hop_length=HOP_LENGTH,
+            win_length=WIN_LENGTH,
+            window=window,
+            return_complex=True,
+        )
 
     def __getitem__(self, idx):
         # 1. Load Clean
@@ -131,23 +142,22 @@ class SpeechNoiseDataset(Dataset):
             noise_scaled = noise_scaled / max_amp
 
         # 5. Compute STFT & Features
-        # Feature: Log Squared Magnitude
-        clean_mag = self._get_stft_magnitude(clean_audio)
+        mix_complex = self._get_stft_complex(mixture)
+        clean_complex = self._get_stft_complex(clean_audio)
+
+        mix_mag = mix_complex.abs()
         noise_mag = self._get_stft_magnitude(noise_scaled)
-        mix_mag   = self._get_stft_magnitude(mixture)
+        clean_mag = clean_complex.abs()
+        mix_phase = torch.angle(mix_complex)
 
-        mix_phase = self._get_stft_phase(mixture)
-        
-        # Log(Mag^2) = 2 * Log(Mag)
-        # Adding small epsilon to prevent log(0)
-        features = 20 * torch.log10(mix_mag + 1e-8)
+        mix_scale = torch.clamp(mix_mag.max(), min=1e-8)
+        mix_complex_norm = mix_complex / mix_scale
+        clean_complex_norm = clean_complex / mix_scale
 
-        # Set max value at 0 dB
-        features = features - torch.max(features)
-        # Clip minimum at -80 dB
-        features = torch.clamp(features, min=-MIN_DB_CLIP)
-        # Normalize to [0, 1]
-        features = (features + MIN_DB_CLIP) / MIN_DB_CLIP
+        features = torch.stack(
+            [mix_complex_norm.real, mix_complex_norm.imag],
+            dim=0,
+        )
 
         # 6. Compute IBM Label
         # 1 if Clean > Noise, else 0
@@ -179,12 +189,15 @@ class SpeechNoiseDataset(Dataset):
         # Current shape is [Freq, Time], unsqueeze to add channel
         
         sample = {
-            "features": features.unsqueeze(0),
+            "features": features,
             "ibm": ibm.unsqueeze(0),
             "clean_mag": clean_mag.unsqueeze(0),
             "mix_mag": mix_mag.unsqueeze(0),
             "mix_phase": mix_phase.unsqueeze(0),
             "clean_audio": clean_audio.unsqueeze(0),
+            "mix_complex": mix_complex_norm.unsqueeze(0),
+            "clean_complex": clean_complex_norm.unsqueeze(0),
+            "mix_scale": mix_scale,
             "filename": None
         }
 

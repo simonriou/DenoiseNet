@@ -11,17 +11,25 @@ def pad_collate(batch):
     collated = {}
 
     # --- Spectrogram padding ---
-    freq_bins = batch[0]["features"].shape[1]
-
-    for key in ["features", "ibm", "mix_mag", "clean_mag", "mix_phase"]:
+    for key in [
+        "features",
+        "ibm",
+        "mix_mag",
+        "clean_mag",
+        "mix_phase",
+        "mix_complex",
+        "clean_complex",
+    ]:
         if batch[0].get(key) is None:
             collated[key] = None
             continue
 
+        channels = batch[0][key].shape[0]
+        freq_bins = batch[0][key].shape[1]
         max_spec_len = max(item[key].shape[2] for item in batch)
 
         padded = torch.zeros(
-            batch_size, 1, freq_bins, max_spec_len,
+            batch_size, channels, freq_bins, max_spec_len,
             dtype=batch[0][key].dtype
         )
 
@@ -30,6 +38,9 @@ def pad_collate(batch):
             padded[i, :, :, :curr_len] = item[key]
 
         collated[key] = padded
+
+    if batch[0].get("mix_scale") is not None:
+        collated["mix_scale"] = torch.tensor([item["mix_scale"].item() for item in batch])
 
     # --- Waveform padding ---
     if batch[0].get("clean_audio") is not None:

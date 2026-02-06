@@ -2,7 +2,7 @@ import torch
 from speechbrain.inference.vocoders import HIFIGAN
 from torchaudio.transforms import GriffinLim
 from torch.utils.data import DataLoader
-from models.DenoiseUNet import DenoiseUNet
+from models.DCUNet import DCUNet
 from training.dataset import SpeechNoiseDataset
 from utils.constants import *
 from utils.save_wav import save_wav
@@ -44,7 +44,7 @@ gl = GriffinLim(
     rand_init=True,
 )
 
-model = DenoiseUNet().to(device)
+model = DCUNet().to(device)
 model.load_state_dict(
     torch.load(MODEL_DIR / f"{MODEL_NAME}.pth", map_location=device)
 )
@@ -59,30 +59,49 @@ total_time = 0.0
 with torch.no_grad():
     for idx, batch in enumerate(loader):
 
-        features      = batch["features"].to(device)      # [1, 1, F, T]
-        mix_mag       = batch["mix_mag"].to(device)       # [1, 1, F, T]
+        features      = batch["features"].to(device)      # [1, 2, F, T]
         clean_audio   = batch["clean_audio"][0].cpu().numpy()
         fname      = batch["filename"][0]
+        mix_complex = batch["mix_complex"].to(device).squeeze(1)
+        mix_scale = batch["mix_scale"].to(device).view(-1, 1, 1)
 
         start_time = time.time()
 
         # Predict mask
-        pred_mask = model(features)                        # [1, 1, F, T]
+        pred_mask = model(features)                        # [1, 2, F, T]
 
-        # Apply mask
-        enhanced_mag = pred_mask * mix_mag                 # [1, 1, F, T]
+        pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
+        enhanced_complex_norm = pred_mask_complex * mix_complex
+        enhanced_complex = enhanced_complex_norm * mix_scale
 
-        enhanced_mag = enhanced_mag.to(device)
-        mix_mag = mix_mag.to(device)
-
-        if PHASE_MODE.lower() == 'gl':
+        if PHASE_MODE.lower() == "complex":
+            enhanced_audio = torch.istft(
+                enhanced_complex[0],
+                n_fft=N_FFT,
+                hop_length=HOP_LENGTH,
+                win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
+                length=batch["clean_audio"].shape[1]
+            )
+            noisy_audio = torch.istft(
+                (mix_complex * mix_scale)[0],
+                n_fft=N_FFT,
+                hop_length=HOP_LENGTH,
+                win_length=WIN_LENGTH,
+                window=torch.hann_window(WIN_LENGTH).to(device),
+                length=batch["clean_audio"].shape[1]
+            )
+        elif PHASE_MODE.lower() == 'gl':
             print("Using Griffin-Lim for phase reconstruction.")
+            enhanced_mag = enhanced_complex.abs().unsqueeze(1)
+            mix_mag = (mix_complex * mix_scale).abs().unsqueeze(1)
             enhanced_audio = gl(enhanced_mag[0, 0])
             noisy_audio = gl(mix_mag[0, 0])
         elif PHASE_MODE.lower() == 'raw':
             print("Using mixture phase for reconstruction.")
-            # Use mixture phase
             mix_phase = batch["mix_phase"].to(device)     # [1, 1, F, T]
+            enhanced_mag = enhanced_complex.abs().unsqueeze(1)
+            mix_mag = (mix_complex * mix_scale).abs().unsqueeze(1)
             complex_spec = enhanced_mag.squeeze(0).squeeze(0) * torch.exp(1j * mix_phase.squeeze(0).squeeze(0))
             enhanced_audio = torch.istft(
                 complex_spec,
