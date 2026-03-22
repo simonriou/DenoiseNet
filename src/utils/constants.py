@@ -28,7 +28,7 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "conformer-2"
+MODEL_NAME = "direct-1"
 MODEL_ARCHITECTURE = "conformer"  # Options: "dcunet", "denoise_unet", "denoise_unet_conformer"
 SAVE_DENOISED = True
 SAVE_NOISY = True
