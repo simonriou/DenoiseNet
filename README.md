@@ -2,7 +2,7 @@
 ## Overview
 **A demo of the model's performances is available at the [docs site](https://simonriou.github.io/DenoiseNet/).**
 
-- Model: **DCU-Net**, a complex-valued U-Net mask estimator trained on complex STFT features with multi-objective losses (complex L1, linear/mel magnitude L1, waveform L1).
+- Model: **DCU-Net**, a complex-valued U-Net direct spectral mapping model trained to predict clean complex STFTs from noisy complex STFTs with multi-objective losses (complex L1, linear/mel magnitude L1, waveform L1).
 - Training corpus: ~2.5 hours of English speech mixed with babble noise at controlled SNR.
 - Inference: streaming-ready; runs in (near) real time on a standard laptop CPU.
 - Results: significant SNR improvements on test set; subjective quality gains observed. Near state-of-the-art performance among lightweight denoising models.
@@ -50,7 +50,7 @@
 - Internals (see [src/training/train.py](src/training/train.py#L62-L190)):
 	- Dataset: [SpeechNoiseDataset](src/training/dataset.py) mixes clean and noise at `TARGET_SNR`, computes complex STFT features, magnitude targets, and phases.
 	- Dataloaders: random 85/15 train/val split with seed 42, padding via [utils/pad_collate.py](src/utils/pad_collate.py).
-	- Model: selected via `MODEL_ARCHITECTURE`, with `dcunet` in [src/models/DCUNet.py](src/models/DCUNet.py) and a DenoiseUNet-style bottleneck-Conformer variant in [src/models/DenoiseUNetConformer.py](src/models/DenoiseUNetConformer.py).
+	- Model: selected via `MODEL_ARCHITECTURE`, with `dcunet` in [src/models/DCUNet.py](src/models/DCUNet.py), a direct-mapping baseline in [src/models/DenoiseUNet.py](src/models/DenoiseUNet.py), and a bottleneck-Conformer variant in [src/models/DenoiseUNetConformer.py](src/models/DenoiseUNetConformer.py). All predict denoised complex spectrograms directly.
 	- Loss: normalized multi-term loss combining complex L1, linear L1, mel L1, and waveform L1.
 	- Checkpoints: saved each epoch to [experiments/checkpoints/<session_name>](experiments/checkpoints). Final weights: [data/models/<session_name>.pth](data/models).
 	- Logs: per-epoch CSV at [experiments/logs/<session_name>/training_log.csv](experiments/logs).
@@ -63,7 +63,7 @@
 - Command: `python -m inference.inference`
 - Internals (see [src/inference/inference.py](src/inference/inference.py#L1-L150)):
 	- Loads `SpeechNoiseDataset` in `test` mode (adds filenames), batch size 1 with padding.
-	- Predicts a complex mask and reconstructs audio directly with complex STFT (`PHASE_MODE='complex'` by default; `raw`/`GL` supported for comparison).
+	- Predicts a denoised complex spectrogram directly and reconstructs audio from it (`PHASE_MODE='complex'` by default; `raw`/`GL` supported for comparison).
 	- Saves enhanced (and optionally noisy) audio to [data/test/enhanced](data/test/enhanced) and logs SNR per file to [experiments/logs/<MODEL_NAME>/inference_snr_log.csv](experiments/logs).
 	- Reports per-file and average inference time.
 
@@ -79,4 +79,4 @@
 - Phase mode errors: `PHASE_MODE='vocoder'` is not implemented; use `raw` or `GL`.
 
 ## Citing
-If you build on this work, please cite the repository and describe DenoiseNet as “a complex-valued U-Net speech denoising model trained with combined complex, linear/mel L1, and waveform losses.”
+If you build on this work, please cite the repository and describe DenoiseNet as “a complex-valued U-Net speech denoising model trained with direct spectral mapping and combined complex, linear/mel L1, and waveform losses.”

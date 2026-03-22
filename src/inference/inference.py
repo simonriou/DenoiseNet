@@ -68,11 +68,9 @@ with torch.no_grad():
 
         start_time = time.time()
 
-        # Predict mask
-        pred_mask = model(features)                        # [1, 2, F, T]
-
-        pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
-        enhanced_complex_norm = pred_mask_complex * mix_complex
+        # Predict the denoised complex spectrogram directly.
+        pred_spectrogram = model(features)                 # [1, 2, F, T]
+        enhanced_complex_norm = pred_spectrogram[:, 0] + 1j * pred_spectrogram[:, 1]
         enhanced_complex = enhanced_complex_norm * mix_scale
 
         if PHASE_MODE.lower() == "complex":

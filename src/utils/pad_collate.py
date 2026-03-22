@@ -13,7 +13,6 @@ def pad_collate(batch):
     # --- Spectrogram padding ---
     for key in [
         "features",
-        "ibm",
         "mix_mag",
         "clean_mag",
         "mix_phase",

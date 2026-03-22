@@ -13,10 +13,10 @@ if DEBUG:
 """
 This Dataset class loads clean speech files and noise files from specified directories.
 It mixes them at a specified SNR to create noisy mixtures.
-It computes complex STFT features and ideal binary masks (IBM) for training a denoising model.
-The __getitem__ method returns a tuple (features, ibm) where:
+It computes complex STFT features and normalized clean complex targets for direct
+spectral mapping. The __getitem__ method returns a sample where:
 - features: Tensor of shape [2, Freq, Time] representing normalized real/imag parts of the noisy mixture STFT.
-- ibm: Tensor of shape [1, Freq, Time] representing the ideal binary mask (1 if clean > noise, else 0).
+- clean_complex: Tensor of shape [1, Freq, Time] representing the normalized clean complex STFT target.
 
 Important notice: Audio files are stored as int16 .pt tensors to save space and loading time.
 This is why we convert them to float32 in the __getitem__ method.
@@ -50,22 +50,6 @@ class SpeechNoiseDataset(Dataset):
 
     def _compute_rms(self, tensor):
         return torch.sqrt(torch.mean(tensor ** 2) + 1e-8)
-
-    def _get_stft_magnitude(self, signal):
-        # Uses torch.stft (Core PyTorch)
-        window = torch.hann_window(WIN_LENGTH, device=signal.device)
-        stft = torch.stft(signal, n_fft=N_FFT, hop_length=HOP_LENGTH, 
-                          win_length=WIN_LENGTH, window=window, 
-                          return_complex=True)
-        # Magnitude = abs(complex)
-        return stft.abs()
-    
-    def _get_stft_phase(self, tensor):
-        window = torch.hann_window(WIN_LENGTH, device=tensor.device)
-        stft = torch.stft(tensor, n_fft=N_FFT, hop_length=HOP_LENGTH, 
-                          win_length=WIN_LENGTH, window=window, 
-                          return_complex=True)
-        return torch.angle(stft)
 
     def _get_stft_complex(self, tensor):
         window = torch.hann_window(WIN_LENGTH, device=tensor.device)
@@ -146,7 +130,6 @@ class SpeechNoiseDataset(Dataset):
         clean_complex = self._get_stft_complex(clean_audio)
 
         mix_mag = mix_complex.abs()
-        noise_mag = self._get_stft_magnitude(noise_scaled)
         clean_mag = clean_complex.abs()
         mix_phase = torch.angle(mix_complex)
 
@@ -159,26 +142,19 @@ class SpeechNoiseDataset(Dataset):
             dim=0,
         )
 
-        # 6. Compute IBM Label
-        # 1 if Clean > Noise, else 0
-        ibm = (clean_mag > noise_mag).float()
-
         if DEBUG:
             print(f"DEBUG: Loaded {os.path.basename(clean_path)}")
             print(f"  Clean RMS: {clean_rms:.4f}, Noise RMS: {noise_rms:.4f}, Scale: {scale_factor:.4f}")
             print(f"  Mixture Max Amp: {torch.max(torch.abs(mixture)):.4f}")
-            print(f"  Feature Shape: {features.shape}, IBM Shape: {ibm.shape}")
+            print(f"  Feature Shape: {features.shape}, Clean Complex Shape: {clean_complex_norm.shape}")
 
-            # Plot one spectrogram + IBM for verification
+            # Plot noisy and clean spectrograms for verification.
             plt.figure(figsize=(12, 6))
-            plt.subplot(3,1,1)
+            plt.subplot(2,1,1)
             plt.title("Mixture Log-Magnitude Spectrogram")
             plt.imshow(20 * torch.log10(mix_mag + 1e-8).numpy(), origin='lower', aspect='auto', cmap='magma')
             plt.colorbar(format='%+2.0f dB')
-            plt.subplot(3,1,2)
-            plt.title("Ideal Binary Mask (IBM)")
-            plt.imshow(ibm.numpy(), origin='lower', aspect='auto', cmap='gray', vmin=0, vmax=1)
-            plt.subplot(3,1,3)
+            plt.subplot(2,1,2)
             plt.title("Clean Log-Magnitude Spectrogram")
             plt.imshow(20 * torch.log10(clean_mag + 1e-8).numpy(), origin='lower', aspect='auto', cmap='magma')
             plt.colorbar(format='%+2.0f dB')
@@ -190,7 +166,6 @@ class SpeechNoiseDataset(Dataset):
         
         sample = {
             "features": features,
-            "ibm": ibm.unsqueeze(0),
             "clean_mag": clean_mag.unsqueeze(0),
             "mix_mag": mix_mag.unsqueeze(0),
             "mix_phase": mix_phase.unsqueeze(0),

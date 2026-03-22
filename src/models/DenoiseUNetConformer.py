@@ -208,7 +208,7 @@ class DenoiseUNetConformer(nn.Module):
     """
     DenoiseUNet-style encoder/decoder with a bottleneck Conformer operating over the
     compressed time sequence. Input/output channels follow the project's real/imag
-    stacked complex-mask convention: [B, 2, F, T].
+    stacked complex-spectrogram convention: [B, 2, F, T].
     """
 
     def __init__(
@@ -248,7 +248,6 @@ class DenoiseUNetConformer(nn.Module):
         self.dec1 = ConvBlock(encoder_channels[1] + encoder_channels[0], encoder_channels[0])
 
         self.out_conv = nn.Conv2d(encoder_channels[0], out_channels, kernel_size=1)
-        self.out_act = nn.Tanh()
         self.pool = nn.MaxPool2d(2, 2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -276,4 +275,4 @@ class DenoiseUNetConformer(nn.Module):
         d1 = torch.cat([d1, e1], dim=1)
         d1 = self.dec1(d1)
 
-        return self.out_act(self.out_conv(d1))
+        return self.out_conv(d1)

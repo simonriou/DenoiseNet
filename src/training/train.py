@@ -17,9 +17,9 @@ This is the main training script for the speech denoising model.
 It sets up the dataset, dataloader, model, loss function, and optimizer.
 It runs the training loop for a specified number of epochs, printing progress and saving model checkpoints.
 
-The model predicts complex ratio masks on STFTs and is trained with a multi-term loss
-combining complex L1, linear/mel magnitude L1, and waveform L1.
-The Adam optimizer is used for training.
+The model performs direct spectral mapping: it predicts the normalized clean complex
+spectrogram directly from the normalized noisy complex spectrogram. Training uses a
+multi-term loss combining complex L1, linear/mel magnitude L1, and waveform L1.
 """
 
 def mel_l1_loss(x, y, mel_fb):
@@ -44,6 +44,9 @@ def l1_loss(x, y):
 def complex_l1_loss(pred, target):
     return torch.mean(torch.abs(pred.real - target.real) + torch.abs(pred.imag - target.imag))
 
+def stacked_channels_to_complex(x):
+    return x[:, 0] + 1j * x[:, 1]
+
 def custom_loss(complex_l1, l1_linear, l1_mel, waveform, lambda_, gamma_, omega_, zeta_):
     # lambda Complex L1 + gamma L1 + omega Mel + zeta Waveform
     return lambda_ * complex_l1 + gamma_ * l1_linear + omega_ * l1_mel + zeta_ * waveform
@@ -63,13 +66,11 @@ def evaluate(model, dataloader, criterion_l1_linear, criterion_l1_mel, device):
         for batch in dataloader:
             features     = batch["features"].to(device)
             clean_audio  = batch["clean_audio"].to(device)
-            mix_complex  = batch["mix_complex"].to(device).squeeze(1)
             clean_complex = batch["clean_complex"].to(device).squeeze(1)
             mix_scale = batch["mix_scale"].to(device).view(-1, 1, 1)
 
-            pred_mask = model(features)
-            pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
-            pred_complex_norm = pred_mask_complex * mix_complex
+            pred_spectrogram = model(features)
+            pred_complex_norm = stacked_channels_to_complex(pred_spectrogram)
             pred_mag = pred_complex_norm.abs().unsqueeze(1)
 
             reconstructed_audio = []
@@ -189,14 +190,12 @@ def train(session_name: str):
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
             features = batch["features"].to(device)
             clean_audio = batch["clean_audio"].to(device)
-            mix_complex = batch["mix_complex"].to(device).squeeze(1)
             clean_complex = batch["clean_complex"].to(device).squeeze(1)
             mix_scale = batch["mix_scale"].to(device).view(-1, 1, 1)
 
             optimizer.zero_grad()
-            pred_mask = model(features)
-            pred_mask_complex = pred_mask[:, 0] + 1j * pred_mask[:, 1]
-            pred_complex_norm = pred_mask_complex * mix_complex
+            pred_spectrogram = model(features)
+            pred_complex_norm = stacked_channels_to_complex(pred_spectrogram)
             pred_mag = pred_complex_norm.abs().unsqueeze(1)
 
             reconstructed_audio = []

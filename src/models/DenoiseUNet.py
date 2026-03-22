@@ -5,14 +5,15 @@ import torch.nn.functional as F
 """
 This is the DenoiseNet model definition.
 It follows the standard U-Net architecture with an encoder-decoder structure and skip connections.
-The model takes as input a log-magnitude spectrogram of shape [Batch, 1, Freq, Time]
-and outputs an ideal binary mask (IBM) of the same shape to be applied to the noisy spectrogram.
+The model takes as input a normalized complex spectrogram of shape [Batch, 2, Freq, Time]
+and predicts a denoised normalized complex spectrogram of the same shape for direct
+spectral mapping.
 The U-Net consists of:
 - Encoder: 3 downsampling blocks, each with Conv2D -> GroupNorm -> ReLU, followed by MaxPooling.
 - Bottleneck: A deeper Conv2D block to capture complex features.
 - Decoder: 3 upsampling blocks, each with Conv2D -> GroupNorm -> ReLU, followed by interpolation upsampling.
 - Skip Connections: Concatenation of encoder outputs to decoder inputs at each level.
-- Output Layer: A final Conv2D layer followed by a Sigmoid activation to produce the mask in [0, 1].
+- Output Layer: A final Conv2D layer that regresses the denoised complex spectrogram.
 
 (a) Switched from BatchNorm to GroupNorm, potentially allowing for better generalization across varying speakers.
 More info: https://docs.pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html
@@ -21,12 +22,12 @@ More info: https://docs.pytorch.org/docs/stable/generated/torch.nn.GroupNorm.htm
 """
 
 class DenoiseUNet(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels: int = 2, out_channels: int = 2):
         super().__init__()
         
         # --- Encoder (Downsampling) ---
         # We increase channels as we go deeper to capture more complex features
-        self.enc1 = self._make_block(1, 16)
+        self.enc1 = self._make_block(in_channels, 16)
         self.enc2 = self._make_block(16, 32)
         self.enc3 = self._make_block(32, 64)
         
@@ -40,8 +41,7 @@ class DenoiseUNet(nn.Module):
         self.dec1 = self._make_block(32 + 16, 16)
         
         # --- Output ---
-        self.out_conv = nn.Conv2d(16, 1, kernel_size=1)
-        self.sigmoid = nn.Sigmoid()
+        self.out_conv = nn.Conv2d(16, out_channels, kernel_size=1)
         
         # Pooling definition
         self.pool = nn.MaxPool2d(2, 2)
@@ -103,6 +103,6 @@ class DenoiseUNet(nn.Module):
         d1 = self.dec1(d1)
         
         # --- Output ---
-        mask = self.sigmoid(self.out_conv(d1))
+        spectrogram = self.out_conv(d1)
         
-        return mask
+        return spectrogram

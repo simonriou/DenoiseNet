@@ -1,9 +1,12 @@
 from models.DCUNet import DCUNet
+from models.DenoiseUNet import DenoiseUNet
 from models.DenoiseUNetConformer import DenoiseUNetConformer
 
 
 MODEL_REGISTRY = {
     "dcunet": DCUNet,
+    "denoise_unet": DenoiseUNet,
+    "denoiseunet": DenoiseUNet,
     "denoise_unet_conformer": DenoiseUNetConformer,
     "denoiseunet_conformer": DenoiseUNetConformer,
     "conformer": DenoiseUNetConformer,
@@ -25,4 +28,4 @@ def build_model(model_architecture: str):
     return MODEL_REGISTRY[key]()
 
 
-__all__ = ["DCUNet", "DenoiseUNetConformer", "MODEL_REGISTRY", "build_model"]
+__all__ = ["DCUNet", "DenoiseUNet", "DenoiseUNetConformer", "MODEL_REGISTRY", "build_model"]

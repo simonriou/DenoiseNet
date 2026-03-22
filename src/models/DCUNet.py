@@ -86,7 +86,6 @@ class DCUNet(nn.Module):
         self.dec1 = ComplexConvBlock(base_channels * 2 + base_channels, base_channels)
 
         self.out_conv = ComplexConv2d(base_channels, 1, kernel_size=1, padding=0)
-        self.out_act = nn.Tanh()
 
         self.pool = nn.AvgPool2d(2)
 
@@ -114,5 +113,5 @@ class DCUNet(nn.Module):
         d1 = torch.cat([d1, e1], dim=1)
         d1 = self.dec1(d1)
 
-        mask = self.out_act(self.out_conv(d1))
-        return mask
+        spectrogram = self.out_conv(d1)
+        return spectrogram
