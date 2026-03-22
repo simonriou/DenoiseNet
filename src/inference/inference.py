@@ -1,8 +1,8 @@
 import torch
-from speechbrain.inference.vocoders import HIFIGAN
+# from speechbrain.inference.vocoders import HIFIGAN
 from torchaudio.transforms import GriffinLim
 from torch.utils.data import DataLoader
-from models.DCUNet import DCUNet
+from models import build_model
 from training.dataset import SpeechNoiseDataset
 from utils.constants import *
 from utils.save_wav import save_wav
@@ -44,11 +44,12 @@ gl = GriffinLim(
     rand_init=True,
 )
 
-model = DCUNet().to(device)
+model = build_model(MODEL_ARCHITECTURE).to(device)
 model.load_state_dict(
     torch.load(MODEL_DIR / f"{MODEL_NAME}.pth", map_location=device)
 )
 model.eval()
+print(f"Loaded architecture: {MODEL_ARCHITECTURE}")
 
 # 4. Output directory
 denoised_dir = NOISE_ENHANCED_DIR

@@ -28,7 +28,8 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "waveform-4"
+MODEL_NAME = "complex"
+MODEL_ARCHITECTURE = "dcunet"  # Options: "dcunet", "denoise_unet_conformer"
 SAVE_DENOISED = True
 SAVE_NOISY = True
 

@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from utils.constants import *
 from training.dataset import SpeechNoiseDataset
-from models.DCUNet import DCUNet
+from models import build_model
 from utils.pad_collate import pad_collate
 
 """
@@ -156,7 +156,8 @@ def train(session_name: str):
     )
     
     # 3. Model & Loss
-    model = DCUNet().to(device)
+    model = build_model(MODEL_ARCHITECTURE).to(device)
+    print(f"Training architecture: {MODEL_ARCHITECTURE}")
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Create checkpoint directory for this session
