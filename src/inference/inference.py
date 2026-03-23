@@ -1,14 +1,14 @@
 import torch
-# from speechbrain.inference.vocoders import HIFIGAN
 from torchaudio.transforms import GriffinLim
 from torch.utils.data import DataLoader
+from inference.classical_reconstruction import reconstruct_classical_waveform
+from inference.neural_vocoder import SpeechHiFiGANVocoder
 from models import build_model
 from training.dataset import SpeechNoiseDataset
 from utils.constants import *
 from utils.save_wav import save_wav
 from utils.compute_snr import compute_snr
 from utils.pad_collate import pad_collate
-from utils.magnitude_to_mel import magnitude_to_mel
 import os
 import csv
 import numpy as np
@@ -51,6 +51,12 @@ model.load_state_dict(
 model.eval()
 print(f"Loaded architecture: {MODEL_ARCHITECTURE}")
 
+stft_window = torch.hann_window(WIN_LENGTH).to(device)
+vocoder = None
+if PHASE_MODE.lower() == "vocoder":
+    print("Loading SpeechBrain HiFi-GAN vocoder.")
+    vocoder = SpeechHiFiGANVocoder(device=device)
+
 # 4. Output directory
 denoised_dir = NOISE_ENHANCED_DIR
 os.makedirs(denoised_dir, exist_ok=True)
@@ -72,70 +78,53 @@ with torch.no_grad():
         pred_spectrogram = model(features)                 # [1, 2, F, T]
         enhanced_complex_norm = pred_spectrogram[:, 0] + 1j * pred_spectrogram[:, 1]
         enhanced_complex = enhanced_complex_norm * mix_scale
+        mix_complex_denorm = mix_complex * mix_scale
+        target_length = batch["clean_audio"].shape[1]
+        noisy_audio = torch.istft(
+            mix_complex_denorm[0],
+            n_fft=N_FFT,
+            hop_length=HOP_LENGTH,
+            win_length=WIN_LENGTH,
+            window=stft_window,
+            length=target_length
+        )
 
-        if PHASE_MODE.lower() == "complex":
-            enhanced_audio = torch.istft(
+        phase_mode = PHASE_MODE.lower()
+        if phase_mode in {"complex", "raw", "hybrid"}:
+            if phase_mode == "hybrid":
+                print("Using hybrid classical reconstruction.")
+            elif phase_mode == "raw":
+                print("Using mixture phase for reconstruction.")
+
+            enhanced_audio = reconstruct_classical_waveform(
+                phase_mode,
                 enhanced_complex[0],
+                mix_complex_denorm[0],
+                batch["mix_phase"].to(device).squeeze(1)[0],
                 n_fft=N_FFT,
                 hop_length=HOP_LENGTH,
                 win_length=WIN_LENGTH,
-                window=torch.hann_window(WIN_LENGTH).to(device),
-                length=batch["clean_audio"].shape[1]
+                window=stft_window,
+                target_length=target_length,
+                mask_smooth_freq=RECON_MASK_SMOOTH_FREQ,
+                mask_smooth_time=RECON_MASK_SMOOTH_TIME,
+                phase_blend_power=RECON_PHASE_BLEND_POWER,
+                mask_ceiling=RECON_MASK_CEILING,
+                loudness_mode=RECON_LOUDNESS_MODE,
+                loudness_blend=RECON_LOUDNESS_BLEND,
+                loudness_max_step_db=RECON_LOUDNESS_MAX_STEP_DB,
             )
-            noisy_audio = torch.istft(
-                (mix_complex * mix_scale)[0],
-                n_fft=N_FFT,
-                hop_length=HOP_LENGTH,
-                win_length=WIN_LENGTH,
-                window=torch.hann_window(WIN_LENGTH).to(device),
-                length=batch["clean_audio"].shape[1]
-            )
-        elif PHASE_MODE.lower() == 'gl':
+        elif phase_mode == 'gl':
             print("Using Griffin-Lim for phase reconstruction.")
             enhanced_mag = enhanced_complex.abs().unsqueeze(1)
-            mix_mag = (mix_complex * mix_scale).abs().unsqueeze(1)
             enhanced_audio = gl(enhanced_mag[0, 0])
-            noisy_audio = gl(mix_mag[0, 0])
-        elif PHASE_MODE.lower() == 'raw':
-            print("Using mixture phase for reconstruction.")
-            mix_phase = batch["mix_phase"].to(device)     # [1, 1, F, T]
-            enhanced_mag = enhanced_complex.abs().unsqueeze(1)
-            mix_mag = (mix_complex * mix_scale).abs().unsqueeze(1)
-            complex_spec = enhanced_mag.squeeze(0).squeeze(0) * torch.exp(1j * mix_phase.squeeze(0).squeeze(0))
-            enhanced_audio = torch.istft(
-                complex_spec,
-                n_fft=N_FFT,
-                hop_length=HOP_LENGTH,
-                win_length=WIN_LENGTH,
-                window=torch.hann_window(WIN_LENGTH).to(device),
-                length=batch["clean_audio"].shape[1]
-            )
-            complex_spec_noisy = mix_mag.squeeze(0).squeeze(0) * torch.exp(1j * mix_phase.squeeze(0).squeeze(0))
-            noisy_audio = torch.istft(
-                complex_spec_noisy,
-                n_fft=N_FFT,
-                hop_length=HOP_LENGTH,
-                win_length=WIN_LENGTH,
-                window=torch.hann_window(WIN_LENGTH).to(device),
-                length=batch["clean_audio"].shape[1]
-            )
-        elif PHASE_MODE.lower() == 'vocoder':
-            raise NotImplementedError("Vocoder mode not implemented yet.")
+        elif phase_mode == 'vocoder':
             print("Using neural vocoder for reconstruction.")
-            # Extract mel spectrogram
-            mel_fb = torch.load(f'mel_fb_{N_FFT}_{N_MELS}_{SAMPLE_RATE}.pt').to(device)  # (n_mels, F)
-            enhanced_mel = magnitude_to_mel(enhanced_mag, mel_fb)  # (1, 1, M, T)
-            hifi_gan = HIFIGAN.from_hparams(
-                source="speechbrain/tts-hifigan-libritts-16kHz",
-                savedir="pretrained_models/tts-hifigan-libritts-16kHz",
-                run_opts={"device":"cuda"} if torch.cuda.is_available() else {"device":"cpu"}
-            )
-
-            waveform = hifi_gan.decode_batch(enhanced_mel.squeeze(0)) # (1, 1, T)
-            enhanced_audio = waveform.squeeze(1) # remove channel dim -> (1, T)
-
-            waveform = hifi_gan.decode_batch(magnitude_to_mel(mix_mag, mel_fb).squeeze(0))
-            noisy_audio = waveform.squeeze(1)
+            enhanced_mag = enhanced_complex.abs().unsqueeze(1)
+            enhanced_audio = vocoder.decode(
+                enhanced_mag,
+                target_length=target_length,
+            ).squeeze(0)
         else:
             raise ValueError(f"Unknown PHASE_MODE: {PHASE_MODE}")
         

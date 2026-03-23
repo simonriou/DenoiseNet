@@ -38,6 +38,7 @@ data/models/*
 ########################
 # Model checkpoints & tensors
 ########################
+pretrained_models/
 *.pt
 *.pth
 *.ckpt

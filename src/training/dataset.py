@@ -25,11 +25,14 @@ The DEBUG flag enables saving intermediate audio files and printing debug inform
 """
 
 class SpeechNoiseDataset(Dataset):
-    def __init__(self, clean_dir, noise_dir, snr_db=5.0, mode='train'):
-        self.clean_files = glob.glob(os.path.join(clean_dir, '*.pt'))
-        self.noise_files = glob.glob(os.path.join(noise_dir, '*.pt'))
+    def __init__(self, clean_dir, noise_dir, snr_db=5.0, mode='train', file_indices=None):
+        self.clean_files = sorted(glob.glob(os.path.join(clean_dir, '*.pt')))
+        self.noise_files = sorted(glob.glob(os.path.join(noise_dir, '*.pt')))
+        if file_indices is not None:
+            self.clean_files = [self.clean_files[idx] for idx in file_indices]
         self.snr_db = snr_db
         self.mode = mode
+        self.test_seed = TEST_RANDOM_SEED
         
         # Pre-load noise files to memory to speed up training (optional, good for small noise sets)
         self.noises = []
@@ -62,10 +65,21 @@ class SpeechNoiseDataset(Dataset):
             return_complex=True,
         )
 
+    def _sample_snr_db(self, rng):
+        if isinstance(self.snr_db, (tuple, list)):
+            if len(self.snr_db) != 2:
+                raise ValueError("snr_db range must contain exactly two values.")
+            lo, hi = sorted(float(v) for v in self.snr_db)
+            return rng.uniform(lo, hi)
+
+        return float(self.snr_db)
+
     def __getitem__(self, idx):
         # 1. Load Clean
         clean_path = self.clean_files[idx]
         clean_audio = torch.load(clean_path).squeeze(0).float()
+        is_deterministic = self.mode != 'train'
+        rng = random.Random(self.test_seed + idx) if is_deterministic else random
 
         if DEBUG:
             print(f"DEBUG: Loading clean file: {clean_path}")
@@ -76,10 +90,19 @@ class SpeechNoiseDataset(Dataset):
         
         # 2. Get Random Noise
         if self.noises:
-            noise_audio = random.choice(self.noises).float()
+            noise_audio = self.noises[rng.randrange(len(self.noises))].float()
         else:
             # Fallback if no noise files
-            noise_audio = torch.randn_like(clean_audio)
+            if is_deterministic:
+                generator = torch.Generator(device=clean_audio.device)
+                generator.manual_seed(self.test_seed + idx)
+                noise_audio = torch.randn(
+                    clean_audio.shape,
+                    generator=generator,
+                    device=clean_audio.device,
+                )
+            else:
+                noise_audio = torch.randn_like(clean_audio)
 
         if noise_audio.dim() > 1: noise_audio = noise_audio.view(-1)
 
@@ -89,7 +112,7 @@ class SpeechNoiseDataset(Dataset):
         
         if noise_len >= clean_len:
             # Pick a random start point in the noise
-            start = random.randint(0, noise_len - clean_len)
+            start = rng.randint(0, noise_len - clean_len)
             noise_segment = noise_audio[start : start + clean_len]
         else:
             # Repeat noise to cover clean file
@@ -99,9 +122,10 @@ class SpeechNoiseDataset(Dataset):
         # 4. Mix at Specific SNR
         clean_rms = self._compute_rms(clean_audio)
         noise_rms = self._compute_rms(noise_segment)
+        snr_db = self._sample_snr_db(rng)
         
         # Calculate scaling factor
-        snr_linear = 10 ** (self.snr_db / 20.0)
+        snr_linear = 10 ** (snr_db / 20.0)
         target_noise_rms = clean_rms / (snr_linear + 1e-8)
         scale_factor = target_noise_rms / (noise_rms + 1e-8)
         
@@ -144,7 +168,7 @@ class SpeechNoiseDataset(Dataset):
 
         if DEBUG:
             print(f"DEBUG: Loaded {os.path.basename(clean_path)}")
-            print(f"  Clean RMS: {clean_rms:.4f}, Noise RMS: {noise_rms:.4f}, Scale: {scale_factor:.4f}")
+            print(f"  Clean RMS: {clean_rms:.4f}, Noise RMS: {noise_rms:.4f}, Scale: {scale_factor:.4f}, SNR: {snr_db:.2f} dB")
             print(f"  Mixture Max Amp: {torch.max(torch.abs(mixture)):.4f}")
             print(f"  Feature Shape: {features.shape}, Clean Complex Shape: {clean_complex_norm.shape}")
 
@@ -173,6 +197,9 @@ class SpeechNoiseDataset(Dataset):
             "mix_complex": mix_complex_norm.unsqueeze(0),
             "clean_complex": clean_complex_norm.unsqueeze(0),
             "mix_scale": mix_scale,
+            "clean_length": clean_audio.shape[0],
+            "spec_length": mix_complex.shape[-1],
+            "snr_db": snr_db,
             "filename": None
         }
 

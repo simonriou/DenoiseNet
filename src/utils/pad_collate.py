@@ -40,6 +40,12 @@ def pad_collate(batch):
 
     if batch[0].get("mix_scale") is not None:
         collated["mix_scale"] = torch.tensor([item["mix_scale"].item() for item in batch])
+    if batch[0].get("clean_length") is not None:
+        collated["clean_length"] = torch.tensor([item["clean_length"] for item in batch], dtype=torch.long)
+    if batch[0].get("spec_length") is not None:
+        collated["spec_length"] = torch.tensor([item["spec_length"] for item in batch], dtype=torch.long)
+    if batch[0].get("snr_db") is not None:
+        collated["snr_db"] = torch.tensor([item["snr_db"] for item in batch], dtype=torch.float32)
 
     # --- Waveform padding ---
     if batch[0].get("clean_audio") is not None:
