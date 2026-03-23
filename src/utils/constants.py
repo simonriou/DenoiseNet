@@ -28,7 +28,7 @@ MODEL_DIR = ROOT / "data" / "models"
 
 LOG_DIR = ROOT / "experiments" / "logs"
 CHECKPOINT_DIR = ROOT / "experiments" / "checkpoints"
-MODEL_NAME = "direct-1"
+MODEL_NAME = "direct-2"
 MODEL_ARCHITECTURE = "conformer"  # Options: "dcunet", "denoise_unet", "denoise_unet_conformer"
 SAVE_DENOISED = True
 SAVE_NOISY = True
@@ -37,10 +37,10 @@ EPOCHS = 100
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
 
-LAMBDA = 1.0 # Complex L1
+LAMBDA = 0.5 # Complex L1
 GAMMA = 0.8 # L1 Linear
-OMEGA = 0.5 # L1 Mel
-ZETA = 0.8 # L1 Waveform
+OMEGA = 1.0 # L1 Mel
+ZETA = 2.0 # L1 Waveform
 
 N_MELS = 80
 ALPHA = 10.0  # Weight for mel-scale L1 loss
